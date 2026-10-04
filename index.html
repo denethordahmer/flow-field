@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07080d">
+<title>Flow Field</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="flow.css">
+</head>
+<body>
+
+<div class="toolApp">
+
+  <div class="toolTopBar">
+    <h1 class="toolTitle">Flow Field</h1>
+    <button class="toolAction" id="btnRandomize" title="Random seed">⟳</button>
+  </div>
+
+  <div class="flowPreview">
+    <canvas id="flowCanvas"></canvas>
+  </div>
+
+  <div class="toolView">
+
+    <div class="flowSection">Flow</div>
+
+    <div class="sliderRow">
+      <div class="sliderTop"><label>Particles</label><span class="val" id="particlesVal">1200</span></div>
+      <input type="range" id="particles" min="150" max="4000" step="50" value="1200">
+    </div>
+
+    <div class="sliderRow">
+      <div class="sliderTop"><label>Flow length</label><span class="val" id="stepsVal">60</span></div>
+      <input type="range" id="steps" min="10" max="250" step="5" value="60">
+    </div>
+
+    <div class="sliderRow">
+      <div class="sliderTop"><label>Step size</label><span class="val" id="stepSizeVal">3</span></div>
+      <input type="range" id="stepSize" min="1" max="12" step="1" value="3">
+    </div>
+
+    <div class="sliderRow">
+      <div class="sliderTop"><label>Feature size</label><span class="val" id="featureSizeVal">70</span></div>
+      <input type="range" id="featureSize" min="1" max="100" step="1" value="70">
+    </div>
+
+    <div class="sliderRow">
+      <div class="sliderTop"><label>Bend (curl)</label><span class="val" id="curlVal">0.9</span></div>
+      <input type="range" id="curl" min="0.1" max="3" step="0.05" value="0.9">
+    </div>
+
+    <div class="flowSection">Style</div>
+
+    <div class="sliderRow">
+      <div class="sliderTop"><label>Line width</label><span class="val" id="lineWidthVal">1.3</span></div>
+      <input type="range" id="lineWidth" min="0.5" max="5" step="0.1" value="1.3">
+    </div>
+
+    <div class="sliderRow">
+      <div class="sliderTop"><label>Opacity</label><span class="val" id="opacityVal">0.5</span></div>
+      <input type="range" id="opacity" min="0.05" max="1" step="0.05" value="0.5">
+    </div>
+
+    <div class="fieldRow">
+      <label>Color mode</label>
+      <select id="colorMode">
+        <option value="solid">Solid</option>
+        <option value="gradient" selected>Gradient (2-color)</option>
+        <option value="tricolor">Tri-color (3-stop)</option>
+        <option value="multistop">Multi-stop (4-color)</option>
+        <option value="spectrum">Spectrum (full rainbow)</option>
+        <option value="monochrome">Monochrome ramp</option>
+        <option value="duotone">Duotone (light/dark split)</option>
+        <option value="complementary">Complementary (auto)</option>
+        <option value="splitcomp">Split-complementary (auto)</option>
+        <option value="analogous">Analogous (auto)</option>
+        <option value="triadic">Triadic (auto)</option>
+        <option value="tetradic">Tetradic (auto)</option>
+        <option value="warm">Warm palette (seeded)</option>
+        <option value="cool">Cool palette (seeded)</option>
+        <option value="noise">Noise-driven color</option>
+      </select>
+    </div>
+
+    <div class="fieldRow" id="directionRow">
+      <label>Direction</label>
+      <select id="direction">
+        <option value="horizontal" selected>Horizontal</option>
+        <option value="vertical">Vertical</option>
+        <option value="diagonal">Diagonal</option>
+        <option value="radial">Radial (center out)</option>
+        <option value="chaotic">Chaotic</option>
+      </select>
+    </div>
+
+    <!-- Color pickers — shown/hidden per mode -->
+    <div class="fieldRow colorPickerRow" id="color1Row">
+      <label>Color 1</label>
+      <button class="colorSwatch" id="color1Swatch" data-target="color1" style="background:#3b82f6;"></button>
+      <input type="hidden" id="color1" value="#3b82f6">
+    </div>
+
+    <div class="fieldRow colorPickerRow" id="color2Row">
+      <label>Color 2</label>
+      <button class="colorSwatch" id="color2Swatch" data-target="color2" style="background:#a855f7;"></button>
+      <input type="hidden" id="color2" value="#a855f7">
+    </div>
+
+    <div class="fieldRow colorPickerRow" id="color3Row">
+      <label>Color 3</label>
+      <button class="colorSwatch" id="color3Swatch" data-target="color3" style="background:#f472b6;"></button>
+      <input type="hidden" id="color3" value="#f472b6">
+    </div>
+
+    <div class="fieldRow colorPickerRow" id="color4Row">
+      <label>Color 4</label>
+      <button class="colorSwatch" id="color4Swatch" data-target="color4" style="background:#34d399;"></button>
+      <input type="hidden" id="color4" value="#34d399">
+    </div>
+
+    <div class="flowSection">Background</div>
+
+    <div class="fieldRow colorPickerRow">
+      <label>Background</label>
+      <button class="colorSwatch" id="bgColorSwatch" data-target="bgColor" style="background:#0d0f16;"></button>
+      <input type="hidden" id="bgColor" value="#0d0f16">
+    </div>
+
+    <div class="fieldRow">
+      <label>Transparent bg</label>
+      <input type="checkbox" id="bgTransparent">
+    </div>
+
+    <div class="flowSection">Output</div>
+
+    <div class="fieldRow">
+      <label>Size</label>
+      <select id="size">
+        <option value="square" selected>Square 1500×1500</option>
+        <option value="portrait">Portrait 900×1600</option>
+        <option value="landscape">Landscape 1600×900</option>
+        <option value="a17">Samsung A17 1080×2340</option>
+        <option value="desktop">Desktop 1920×1080</option>
+      </select>
+    </div>
+
+    <div class="fieldRow">
+      <label>Seed</label>
+      <input type="number" id="seed" value="1" min="0" max="999999" inputmode="numeric">
+    </div>
+
+  </div>
+
+  <div class="exportBar">
+    <button class="exportBtn" id="btnExport">Export PNG</button>
+    <button class="exportBtn primary" id="btnGenerate">Generate</button>
+  </div>
+
+</div>
+
+<!-- ===== CUSTOM COLOR PICKER POPOVER ===== -->
+<div id="colorPickerOverlay" class="cpOverlay hidden" role="dialog" aria-label="Color picker">
+  <div class="cpPanel">
+    <div class="cpTitle" id="cpTitle">Pick a color</div>
+
+    <!-- Hue + SL square -->
+    <div class="cpSLWrap">
+      <canvas id="cpSLCanvas" width="260" height="200"></canvas>
+      <div id="cpSLCursor" class="cpCursor"></div>
+    </div>
+
+    <!-- Hue strip -->
+    <div class="cpHueWrap">
+      <canvas id="cpHueCanvas" width="260" height="24"></canvas>
+      <div id="cpHueCursor" class="cpHueCursor"></div>
+    </div>
+
+    <!-- Hex field -->
+    <div class="cpHexRow">
+      <span class="cpHexLabel">#</span>
+      <input type="text" id="cpHexInput" class="cpHexInput" maxlength="6" spellcheck="false">
+      <div id="cpHexPreview" class="cpHexPreview"></div>
+    </div>
+
+    <!-- Quick presets -->
+    <div class="cpPresets" id="cpPresets"></div>
+
+    <div class="cpButtons">
+      <button class="cpBtn" id="cpCancel">Cancel</button>
+      <button class="cpBtn primary" id="cpApply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<script src="flow.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(function(e){
+      console.warn("SW not started:", e);
+    });
+  }
+</script>
+</body>
+</html>
