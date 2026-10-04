@@ -7,6 +7,15 @@
   var canvas = document.getElementById("flowCanvas");
   var ctx    = canvas.getContext("2d");
   var TWO_PI = Math.PI * 2;
+  var renderTimer = null;
+
+  var sizes = {
+    square: [1500, 1500],
+    portrait: [900, 1600],
+    landscape: [1600, 900],
+    a17: [1080, 2340],
+    desktop: [1920, 1080]
+  };
 
   /* -----------------------------------------------------------------------
      SEEDED RANDOM
@@ -115,7 +124,6 @@
   }
 
   function multiLerp(stops, t) {
-    // stops: array of rgb arrays, t in [0,1]
     if (t <= 0) return stops[0];
     if (t >= 1) return stops[stops.length - 1];
     var seg = (stops.length - 1) * t;
@@ -131,7 +139,6 @@
   }
 
   function pickColor(s, x, y, W, H, rand, noiseVal) {
-    // position parameter t (0–1)
     var t;
     switch (s.direction) {
       case "vertical":  t = y / H; break;
@@ -149,107 +156,96 @@
     var h1 = hsl1[0];
 
     switch (s.mode) {
-
       case "solid":
         return s.c1;
-
       case "gradient":
         return lerpRgb(s.c1, s.c2, t);
-
       case "tricolor":
         return t < 0.5
           ? lerpRgb(s.c1, s.c2, t * 2)
           : lerpRgb(s.c2, s.c3, (t - 0.5) * 2);
-
       case "multistop":
         return multiLerp([s.c1, s.c2, s.c3, s.c4], t);
-
       case "spectrum":
         return hslToRgb((h1 + t * 360) % 360, 72, 58);
-
       case "monochrome":
         return hslToRgb(h1, hsl1[1], 15 + t * 70);
-
       case "duotone":
-        // dark extreme → light extreme; threshold at midpoint
         return t < 0.5 ? lerpRgb([10, 10, 20], s.c1, t * 2)
                        : lerpRgb(s.c1, [230, 230, 240], (t - 0.5) * 2);
-
       case "complementary": {
         var hComp = (h1 + 180) % 360;
         return hslToRgb(t < 0.5 ? h1 : hComp, 65, 55);
       }
-
       case "splitcomp": {
         var hues = [h1, (h1 + 150) % 360, (h1 + 210) % 360];
         return hslToRgb(hues[Math.floor(t * 3) % 3], 65, 55);
       }
-
       case "analogous": {
         var ha = (h1 - 30 + t * 60) % 360;
         if (ha < 0) ha += 360;
         return hslToRgb(ha, 68, 55);
       }
-
       case "triadic": {
         var hues3 = [h1, (h1 + 120) % 360, (h1 + 240) % 360];
         return hslToRgb(hues3[Math.floor(t * 3) % 3], 65, 55);
       }
-
       case "tetradic": {
         var hues4 = [h1, (h1+90)%360, (h1+180)%360, (h1+270)%360];
         return hslToRgb(hues4[Math.floor(t * 4) % 4], 65, 55);
       }
-
       case "warm": {
-        // warm range: roughly 0–60° (reds, oranges, yellows)
-        var hw = (s.seedOffset + t * 60) % 60;
+        var hw = (s.seed + t * 60) % 60;
         return hslToRgb(hw, 75, 55);
       }
-
       case "cool": {
-        // cool range: 180–280° (cyans, blues, purples)
-        var hc = 180 + (s.seedOffset + t * 100) % 100;
+        var hc = 180 + (s.seed + t * 100) % 100;
         return hslToRgb(hc, 65, 55);
       }
-
       case "noise": {
-        // noiseVal is already in [-1,1]; map to full hue cycle
         var hn = ((noiseVal + 1) / 2) * 360;
         return hslToRgb(hn, 70, 55);
       }
-
       default:
         return s.c1;
     }
   }
 
   /* -----------------------------------------------------------------------
-     READ STATE
+     STATE & RENDER
   ----------------------------------------------------------------------- */
+  function schedule() {
+    if (renderTimer) clearTimeout(renderTimer);
+    renderTimer = setTimeout(render, 50);
+  }
+
   function readState() {
     return {
-      seed:        parseInt(document.getElementById("seed").value, 10) || 1,
-      particles:   parseInt(document.getElementById("particles").value, 10),
-      steps:       parseInt(document.getElementById("steps").value, 10),
-      stepSize:    parseFloat(document.getElementById("stepSize").value),
-      featureSize: parseInt(document.getElementById("featureSize").value, 10),
-      curl:        parseFloat(document.getElementById("curl").value),
-      lineWidth:   parseFloat(document.getElementById("lineWidth").value),
-      opacity:     parseFloat(document.getElementById("opacity").value),
-      mode:        document.getElementById("colorMode").value,
-      direction:   document.getElementById("direction").value,
-      c1:          hexToRgb(document.getElementById("color1").value),
-      c2:          hexToRgb(document.getElementById("color2").value),
-      c3:          hexToRgb(document.getElementById("color3").value),
-      c4:          hexToRgb(document.getElementById("color4").value),
-      bgColor:     document.getElementById("bgColor").value,
-      bgTransparent: document.getElementById("bgTransparent").checked,
-      landscape: [1600, 900],
-      a17:       [1080, 2340],
-      desktop:   [1920, 1080]
+      seed:          parseInt(document.getElementById("seed").value, 10) || 1,
+      particles:     parseInt(document.getElementById("particles").value, 10),
+      steps:         parseInt(document.getElementById("steps").value, 10),
+      stepSize:      parseFloat(document.getElementById("stepSize").value),
+      featureSize:   parseInt(document.getElementById("featureSize").value, 10),
+      curl:          parseFloat(document.getElementById("curl").value),
+      lineWidth:     parseFloat(document.getElementById("lineWidth").value),
+      opacity:       parseFloat(document.getElementById("opacity").value),
+      mode:          document.getElementById("colorMode").value,
+      direction:     document.getElementById("direction").value,
+      size:          document.getElementById("size").value,
+      c1:            hexToRgb(document.getElementById("color1").value),
+      c2:            hexToRgb(document.getElementById("color2").value),
+      c3:            hexToRgb(document.getElementById("color3").value),
+      c4:            hexToRgb(document.getElementById("color4").value),
+      bgColor:       document.getElementById("bgColor").value,
+      bgTransparent: document.getElementById("bgTransparent").checked
     };
-    var W = sizes[s.size][0], H = sizes[s.size][1];
+  }
+
+  function render() {
+    var s = readState();
+    var W = sizes[s.size] ? sizes[s.size][0] : 1500;
+    var H = sizes[s.size] ? sizes[s.size][1] : 1500;
+    
     canvas.width = W; canvas.height = H;
 
     if (s.bgTransparent) {
@@ -267,9 +263,9 @@
     var rows  = Math.max(1, Math.ceil(s.particles / cols));
     var cellW = W / cols, cellH = H / rows;
 
-    ctx.lineCap    = "round";
-    ctx.lineJoin   = "round";
-    ctx.lineWidth  = s.lineWidth;
+    ctx.lineCap     = "round";
+    ctx.lineJoin    = "round";
+    ctx.lineWidth   = s.lineWidth;
     ctx.globalAlpha = s.opacity;
 
     for (var r = 0; r < rows; r++) {
@@ -277,7 +273,6 @@
         var px = c * cellW + rand() * cellW;
         var py = r * cellH + rand() * cellH;
 
-        // sample noise at start for noise-driven mode & rotation jitter
         var nv = noise(px * scale, py * scale);
         var col = pickColor(s, px, py, W, H, rand, nv);
 
@@ -321,7 +316,6 @@
 
   /* -----------------------------------------------------------------------
      SYNC DYNAMIC CONTROLS
-     Show/hide color rows based on chosen mode
   ----------------------------------------------------------------------- */
   function syncDynamicControls() {
     var mode = document.getElementById("colorMode").value;
@@ -347,7 +341,6 @@
       document.getElementById(id).classList.toggle("hidden", !show[i]);
     });
 
-    // direction row only makes sense for position-based modes
     var positionBased = ["solid","gradient","tricolor","multistop","spectrum",
                          "monochrome","duotone","complementary","splitcomp",
                          "analogous","triadic","tetradic"];
@@ -368,8 +361,8 @@
     hexPreview:document.getElementById("cpHexPreview"),
     presets:   document.getElementById("cpPresets"),
     title:     document.getElementById("cpTitle"),
-    currentTarget: null,  // id of the hidden input being edited
-    h: 0, s: 100, l: 50,  // current HSL
+    currentTarget: null,
+    h: 0, s: 100, l: 50,
 
     PRESETS: [
       "#3b82f6","#6366f1","#a855f7","#ec4899","#f43f5e",
@@ -382,7 +375,6 @@
   function drawHueStrip() {
     var c = CP.hueCanvas;
     var w = c.width, h = c.height;
-    // size canvas to its display size
     c.width  = c.offsetWidth  || 260;
     c.height = c.offsetHeight || 24;
     w = c.width; h = c.height;
@@ -401,13 +393,11 @@
     c.height = c.offsetHeight || 200;
     var w = c.width, h = c.height;
     var cx = c.getContext("2d");
-    // white → color gradient (horizontal)
     var gH = cx.createLinearGradient(0, 0, w, 0);
     gH.addColorStop(0, "hsl(" + hue + ",0%,100%)");
     gH.addColorStop(1, "hsl(" + hue + ",100%,50%)");
     cx.fillStyle = gH;
     cx.fillRect(0, 0, w, h);
-    // transparent → black gradient (vertical)
     var gV = cx.createLinearGradient(0, 0, 0, h);
     gV.addColorStop(0, "rgba(0,0,0,0)");
     gV.addColorStop(1, "rgba(0,0,0,1)");
@@ -418,9 +408,8 @@
   function hslFromSLPos(x, y) {
     var w = CP.slCanvas.width  || 260;
     var h = CP.slCanvas.height || 200;
-    var sx = Math.max(0, Math.min(1, x / w)); // 0=white,1=full-sat
-    var ly = Math.max(0, Math.min(1, y / h)); // 0=light, 1=dark
-    // convert to HSL: white→color horizontally, then darken vertically
+    var sx = Math.max(0, Math.min(1, x / w));
+    var ly = Math.max(0, Math.min(1, y / h));
     var lightness = (1 - ly) * (1 - sx / 2) * 100;
     var saturation = sx === 0 ? 0 : (100 * sx * (1 - ly)) / (1 - Math.abs(2 * lightness / 100 - 1) + 1e-9);
     saturation = Math.max(0, Math.min(100, saturation));
@@ -431,10 +420,8 @@
   function slPosFromHSL(s, l) {
     var w = CP.slCanvas.width  || 260;
     var h = CP.slCanvas.height || 200;
-    // invert: find x (saturation) and y (lightness within that column)
     var lNorm = l / 100;
     var sNorm = s / 100;
-    // x = saturation in the "white→full" axis
     var x = sNorm * (1 - Math.abs(2 * lNorm - 1)) / (2 * lNorm * (1 - lNorm) + 1e-9);
     x = Math.max(0, Math.min(1, x));
     var ly = 1 - lNorm / (1 - x / 2 + 1e-9);
@@ -456,15 +443,11 @@
   function openPicker(targetId, labelText) {
     CP.currentTarget = targetId;
     CP.title.textContent = "Pick: " + labelText;
-
-    // read current value
     var hex = document.getElementById(targetId).value || "#3b82f6";
     var rgb = hexToRgb(hex);
     var hsl = rgbToHsl(rgb[0], rgb[1], rgb[2]);
     CP.h = hsl[0]; CP.s = hsl[1]; CP.l = hsl[2];
-
     CP.overlay.classList.remove("hidden");
-    // draw after a frame so canvas has rendered dimensions
     requestAnimationFrame(function () {
       drawHueStrip();
       drawSLSquare(CP.h);
@@ -502,7 +485,6 @@
     schedule();
   }
 
-  // hue strip interaction
   function hueEventPos(e) {
     var rect = CP.hueCanvas.getBoundingClientRect();
     var clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -521,7 +503,6 @@
   document.addEventListener("mouseup",  function(){ CP.hueCanvas.removeEventListener("mousemove",  onHueChange); });
   document.addEventListener("touchend", function(){ CP.hueCanvas.removeEventListener("touchmove",  onHueChange); });
 
-  // SL square interaction
   function slEventPos(e) {
     var rect = CP.slCanvas.getBoundingClientRect();
     var clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -542,7 +523,6 @@
   document.addEventListener("mouseup",  function(){ CP.slCanvas.removeEventListener("mousemove",  onSLChange); });
   document.addEventListener("touchend", function(){ CP.slCanvas.removeEventListener("touchmove",  onSLChange); });
 
-  // hex input
   CP.hexInput.addEventListener("input", function () {
     var val = CP.hexInput.value.replace(/[^0-9a-fA-F]/g, "");
     if (val.length === 6) {
@@ -562,7 +542,6 @@
     if (e.target === CP.overlay) CP.overlay.classList.add("hidden");
   });
 
-  // open picker when any swatch is tapped
   document.querySelectorAll(".colorSwatch").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var targetId  = btn.getAttribute("data-target");
@@ -571,7 +550,6 @@
     });
   });
 
-  // bg swatch
   document.getElementById("bgColorSwatch").addEventListener("click", function () {
     openPicker("bgColor", "Background");
   });
