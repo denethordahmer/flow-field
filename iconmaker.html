@@ -5,24 +5,109 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Icon Maker — Flow Field</title>
 <style>
-  :root{
-    --bg:#07080d; --panel:#10131c; --panel2:#161a26; --panel3:#1c2130;
-    --border:#242a3a; --borderStrong:#333a4d; --text:#eef0f7; --dim:#8b90a6;
-    --accent:#7c5cff; --accent2:#a58bff;
+  :root {
+    --bg: #07080d; --panel: #10131c; --panel2: #161a26; --panel3: #1c2130;
+    --border: #242a3a; --borderStrong: #333a4d; --text: #eef0f7; --dim: #8b90a6;
+    --accent: #7c5cff; --accent2: #a58bff;
   }
-  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html,body{
-    margin:0; padding:0; background:var(--bg); color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    height:100%; overscroll-behavior:none; touch-action:manipulation;
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;
   }
-  .wrap{
-    max-width:520px; margin:0 auto;
-    padding:env(safe-area-inset-top,0px) 16px calc(env(safe-area-inset-bottom,0px) + 24px) 16px;
-    display:flex; flex-direction:column; gap:14px;
+  .wrap {
+    width: 90%; max-width: 440px; padding: 32px 24px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 16px; display: flex; flex-direction: column; gap: 16px;
   }
-  h1{ margin:16px 0 0; font-size:22px; font-weight:800; text-align:center;
-      background:linear-gradient(135deg,var(--text),var(--accent2));
-      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-  h2{ margin:0; font-size:11px; text-transform:uppercase; letter-spacing:.1em;
-  document.getElementById("btn192").addEventListener("click", function () { download("icon-192.png",     192, 0.06); });
+  h1 { 
+    margin: 0; font-size: 24px; font-weight: 800; text-align: center;
+    background: linear-gradient(135deg, var(--text), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; 
+  }
+  p { margin: 0 0 8px 0; color: var(--dim); font-size: 14px; text-align: center; line-height: 1.5; }
+  .btn {
+    background: var(--panel2); border: 1px solid var(--borderStrong);
+    color: var(--text); padding: 14px; border-radius: 12px; font-weight: 700;
+    cursor: pointer; text-align: center; transition: 0.15s ease; font-size: 14px;
+  }
+  .btn:hover { background: var(--panel3); border-color: var(--accent); }
+  .btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0a0b10; border: none; }
+  canvas { display: none; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Icon Generator</h1>
+  <p>Generate styled offline asset icons required for the Flow Field PWA manifest installation.</p>
+  <button class="btn" id="btn192">Generate icon-192.png</button>
+  <button class="btn" id="btn512">Generate icon-512.png</button>
+  <button class="btn primary" id="btnMaskable">Generate maskable-512.png</button>
+</div>
+
+<canvas id="iconCanvas"></canvas>
+
+<script>
+  const canvas = document.getElementById("iconCanvas");
+  const ctx = canvas.getContext("2d");
+
+  function drawFlowArt(size, isMaskable) {
+    canvas.width = size; canvas.height = size;
+    
+    // Maskable icons require edge-to-edge solid color bleeding
+    ctx.fillStyle = isMaskable ? "#10131c" : "#07080d";
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.lineCap = "round";
+    const scale = size / 512;
+    
+    const lines = [
+      { color: "#3b82f6", width: 8, points: [[0.1, 0.8], [0.3, 0.5], [0.6, 0.4], [0.9, 0.2]] },
+      { color: "#a855f7", width: 12, points: [[0.1, 0.9], [0.4, 0.7], [0.7, 0.6], [0.9, 0.3]] },
+      { color: "#7c5cff", width: 16, points: [[0.2, 0.9], [0.5, 0.8], [0.8, 0.5], [0.9, 0.1]] }
+    ];
+
+    lines.forEach(line => {
+      ctx.beginPath();
+      ctx.strokeStyle = line.color;
+      ctx.lineWidth = line.width * scale;
+      
+      line.points.forEach((p, i) => {
+         const x = p[0] * size;
+         const y = p[1] * size;
+         if (i === 0) {
+             ctx.moveTo(x, y);
+         } else {
+           const prevX = line.points[i-1][0] * size;
+           const prevY = line.points[i-1][1] * size;
+           const cpX = (x + prevX) / 2;
+           const cpY = (y + prevY) / 2;
+           ctx.quadraticCurveTo(cpX, prevY, x, y);
+         }
+      });
+      ctx.stroke();
+    });
+  }
+
+  function download(filename, size, isMaskable) {
+    drawFlowArt(size, isMaskable);
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }, "image/png");
+  }
+
+  document.getElementById("btn192").addEventListener("click", () => download("icon-192.png", 192, false));
+  document.getElementById("btn512").addEventListener("click", () => download("icon-512.png", 512, false));
+  document.getElementById("btnMaskable").addEventListener("click", () => download("maskable-512.png", 512, true));
+</script>
+</body>
+</html>
