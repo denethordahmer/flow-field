@@ -1,12 +1,18 @@
-const CACHE_NAME = "flow-field-v5";
+/* =========================================================================
+   FLOW FIELD — sw.js (offline memory)
+   v6: cache version bumped so phones pick up the new colour fixes.
+   ========================================================================= */
+const CACHE_NAME = "flow-field-v6";
 const APP_FILES = ["./","./index.html","./flow.css","./flow.js","./manifest.webmanifest"];
 
 self.addEventListener("install",(e)=>{
   e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(APP_FILES)).then(()=>self.skipWaiting()));
 });
+
 self.addEventListener("activate",(e)=>{
   e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));
 });
+
 self.addEventListener("fetch",(e)=>{
   if(new URL(e.request.url).origin!==self.location.origin||e.request.method!=="GET")return;
   e.respondWith(caches.match(e.request).then(cached=>{

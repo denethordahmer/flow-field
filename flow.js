@@ -1,6 +1,16 @@
 /* =========================================================================
-   FLOW FIELD v2 — flow.js
+   FLOW FIELD v3 — flow.js
    Bottom sheet · accordion rows · 15 color modes · custom picker
+
+   v3 changes:
+   - Auto colour schemes now keep the saturation and lightness of the colour
+     you pick. Only the hue rotates, so your chosen shade sticks.
+   - Warm, Cool and Noise are tinted by Color 1.
+   - Duotone now uses Color 1 and Color 2.
+   - Color 1 is relabelled "Base colour" in auto modes.
+   - Background row dims with a note when Transparent is on.
+   - Randomize no longer turns transparency on.
+   - Colour picker cursor now stays under your finger (correct maths).
    ========================================================================= */
 (function () {
   "use strict";
@@ -33,12 +43,12 @@
   function makePerlin(rand) {
     var perm = new Uint8Array(256);
     for (var i = 0; i < 256; i++) perm[i] = i;
-    for (var i = 255; i > 0; i--) {
-      var j = Math.floor(rand() * (i + 1));
-      var tmp = perm[i]; perm[i] = perm[j]; perm[j] = tmp;
+    for (var i2 = 255; i2 > 0; i2--) {
+      var j = Math.floor(rand() * (i2 + 1));
+      var tmp = perm[i2]; perm[i2] = perm[j]; perm[j] = tmp;
     }
     var p = new Uint8Array(512);
-    for (var i = 0; i < 512; i++) p[i] = perm[i & 255];
+    for (var i3 = 0; i3 < 512; i3++) p[i3] = perm[i3 & 255];
 
     function fade(t) { return t*t*t*(t*(t*6-15)+10); }
     function lerp(a,b,t){ return a+t*(b-a); }
@@ -73,7 +83,7 @@
     return "#"+[r,g,b].map(function(v){return("0"+Math.round(v).toString(16)).slice(-2);}).join("");
   }
   function hslToRgb(h,s,l){
-    h/=360;s/=100;l/=100;
+    h=(((h%360)+360)%360)/360;s/=100;l/=100;
     if(s===0){var v=Math.round(l*255);return[v,v,v];}
     var q=l<0.5?l*(1+s):l+s-l*s,p2=2*l-q;
     function hue(t){
@@ -98,34 +108,77 @@
     }
     return[h*360,s*100,l*100];
   }
+  /* HSV helpers — used by the colour picker (h 0-360, s 0-1, v 0-1) */
+  function hsvToRgb(h,s,v){
+    h=(((h%360)+360)%360)/60;
+    var i=Math.floor(h),f=h-i;
+    var p=v*(1-s),q=v*(1-s*f),t=v*(1-s*(1-f)),r,g,b;
+    switch(i%6){
+      case 0:r=v;g=t;b=p;break;
+      case 1:r=q;g=v;b=p;break;
+      case 2:r=p;g=v;b=t;break;
+      case 3:r=p;g=q;b=v;break;
+      case 4:r=t;g=p;b=v;break;
+      default:r=v;g=p;b=q;
+    }
+    return[Math.round(r*255),Math.round(g*255),Math.round(b*255)];
+  }
+  function rgbToHsv(r,g,b){
+    r/=255;g/=255;b/=255;
+    var mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn,h=0;
+    if(d!==0){
+      if(mx===r)      h=((g-b)/d)%6;
+      else if(mx===g) h=(b-r)/d+2;
+      else            h=(r-g)/d+4;
+      h*=60; if(h<0)h+=360;
+    }
+    return[h,mx===0?0:d/mx,mx];
+  }
   function lerpRgb(a,b,t){return[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];}
   function multiLerp(stops,t){
     if(t<=0)return stops[0];if(t>=1)return stops[stops.length-1];
     var seg=(stops.length-1)*t,i=Math.floor(seg);
     return lerpRgb(stops[i],stops[i+1],seg-i);
   }
+  function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+  function smooth(a,b,t){var x=clamp((t-a)/(b-a),0,1);return x*x*(3-2*x);}
 
   /* -----------------------------------------------------------------------
      COLOR MODE ENGINE
+     Auto modes read hue, saturation and lightness from Color 1 (the base
+     colour). Hue rotates; saturation and lightness stay as picked.
   ----------------------------------------------------------------------- */
   function pickColor(mode,t,c1,c2,c3,c4,nv,seedOffset){
-    var hsl1=rgbToHsl(c1[0],c1[1],c1[2]),h1=hsl1[0];
+    var hsl1=rgbToHsl(c1[0],c1[1],c1[2]);
+    var h1=hsl1[0];
+    /* a grey/white/black base has no real hue: give it a usable saturation */
+    var S=hsl1[1]<6?65:hsl1[1];
+    var L=clamp(hsl1[2],12,88);
+
     switch(mode){
       case "solid":         return c1;
       case "gradient":      return lerpRgb(c1,c2,t);
       case "tricolor":      return t<0.5?lerpRgb(c1,c2,t*2):lerpRgb(c2,c3,(t-0.5)*2);
       case "multistop":     return multiLerp([c1,c2,c3,c4],t);
-      case "spectrum":      return hslToRgb((h1+t*360)%360,72,58);
-      case "monochrome":    return hslToRgb(h1,hsl1[1],15+t*70);
-      case "duotone":       return t<0.5?lerpRgb([10,10,20],c1,t*2):lerpRgb(c1,[230,230,240],(t-0.5)*2);
-      case "complementary": return hslToRgb(t<0.5?h1:(h1+180)%360,65,55);
-      case "splitcomp":  {var hs=[h1,(h1+150)%360,(h1+210)%360];return hslToRgb(hs[Math.floor(t*3)%3],65,55);}
-      case "analogous":     return hslToRgb(((h1-30+t*60)%360+360)%360,68,55);
-      case "triadic":    {var ht=[h1,(h1+120)%360,(h1+240)%360];return hslToRgb(ht[Math.floor(t*3)%3],65,55);}
-      case "tetradic":   {var hq=[h1,(h1+90)%360,(h1+180)%360,(h1+270)%360];return hslToRgb(hq[Math.floor(t*4)%4],65,55);}
-      case "warm":          return hslToRgb((seedOffset+t*60)%60,75,55);
-      case "cool":          return hslToRgb(180+(seedOffset+t*100)%100,65,55);
-      case "noise":         return hslToRgb(((nv+1)/2)*360,70,55);
+      case "spectrum":      return hslToRgb(h1+t*360,S,L);
+      case "monochrome":    return hslToRgb(h1,hsl1[1],clamp(hsl1[2]-35+t*70,4,96));
+      case "duotone":       return lerpRgb(c1,c2,smooth(0.35,0.65,t));
+      case "complementary": return hslToRgb(t<0.5?h1:h1+180,S,L);
+      case "splitcomp":  {var hs=[h1,h1+150,h1+210];return hslToRgb(hs[Math.min(2,Math.floor(t*3))],S,L);}
+      case "analogous":     return hslToRgb(h1-30+t*60,S,L);
+      case "triadic":    {var ht=[h1,h1+120,h1+240];return hslToRgb(ht[Math.min(2,Math.floor(t*3))],S,L);}
+      case "tetradic":   {var hq=[h1,h1+90,h1+180,h1+270];return hslToRgb(hq[Math.min(3,Math.floor(t*4))],S,L);}
+      case "warm": {
+        /* warm range is red to yellow (0-60). Base hue pulls the centre. */
+        var wc=(h1>=0&&h1<=60)?h1:(h1>=210?0:60);
+        return hslToRgb(wc-30+((seedOffset+t*60)%60),S,L);
+      }
+      case "cool": {
+        /* cool range is cyan to violet. Base hue pulls the centre. */
+        var cc=(h1>=150&&h1<=330)?clamp(h1,200,260):230;
+        return hslToRgb(cc-50+((seedOffset+t*100)%100),S,L);
+      }
+      case "noise":         return hslToRgb(((nv+1)/2)*360+h1,S,L);
       default:              return c1;
     }
   }
@@ -239,7 +292,8 @@
 
   /* -----------------------------------------------------------------------
      RANDOMIZE
-     Shuffles every setting except Size (dimensions stay as-is).
+     Shuffles every setting except Size. Transparency is always turned off
+     so the Background picker never silently stops working.
   ----------------------------------------------------------------------- */
   function randomFrom(list){
     return list[Math.floor(Math.random() * list.length)];
@@ -260,8 +314,16 @@
     if (dot) dot.style.background = hex;
   }
 
+  function setTransparent(on){
+    val("bgTransparent").value = on ? "true" : "false";
+    var tg = document.getElementById("bgTransparentToggle");
+    tg.setAttribute("data-on", on ? "true" : "false");
+    tg.textContent = on ? "On" : "Off";
+    document.getElementById("bgTransparentVal").textContent = on ? "On" : "Off";
+    syncBgRow();
+  }
+
   function randomizeAll(){
-    /* numeric sliders */
     val("seed").value        = Math.floor(Math.random()*900000)+100000;
     val("particles").value   = Math.floor(600+Math.random()*2400);
     val("steps").value       = Math.floor(30+Math.random()*120);
@@ -271,31 +333,18 @@
     val("lineWidth").value   = (0.5+Math.random()*2.5).toFixed(1);
     val("opacity").value     = (0.2+Math.random()*0.7).toFixed(2);
 
-    /* color scheme — random from the full 15-mode list */
     val("colorMode").value = randomFrom(Object.keys(SELECT_LABELS.colorMode));
-
-    /* direction */
     val("direction").value = randomFrom(["horizontal","vertical","diagonal","radial","chaotic"]);
 
-    /* the four color pickers */
     setColorInput("color1", randomHex());
     setColorInput("color2", randomHex());
     setColorInput("color3", randomHex());
     setColorInput("color4", randomHex());
-
-    /* background colour */
     setColorInput("bgColor", randomHex());
 
-    /* transparent background — random on/off */
-    var bgtOn = Math.random() < 0.5;
-    val("bgTransparent").value = bgtOn ? "true" : "false";
-    document.getElementById("bgTransparentToggle").setAttribute("data-on", bgtOn ? "true" : "false");
-    document.getElementById("bgTransparentToggle").textContent = bgtOn ? "On" : "Off";
-    document.getElementById("bgTransparentVal").textContent = bgtOn ? "On" : "Off";
+    setTransparent(false);
 
-    /* show/hide the correct colour rows for the new mode */
     syncColorRows();
-
     syncAllBadges();
     schedule();
   }
@@ -304,34 +353,28 @@
      BOTTOM SHEET OPEN/CLOSE
   ----------------------------------------------------------------------- */
   handle.addEventListener("click", function(e){
-    /* don't toggle if Generate button was tapped */
     if(e.target.closest(".generateBtn")) return;
     sheet.classList.toggle("open");
   });
 
   /* -----------------------------------------------------------------------
      ACCORDION ROWS
-     Tap a row to expand its control; tap again (or tap another) to collapse
   ----------------------------------------------------------------------- */
   var COLOR_ROWS=["color1","color2","color3","color4","bgColor"];
 
   document.querySelectorAll(".settingRow").forEach(function(row){
     row.addEventListener("click", function(e){
-      /* ignore clicks inside the already-open control area */
       if(e.target.closest(".settingControl") && row.classList.contains("active")) return;
 
       var wasActive=row.classList.contains("active");
-      /* collapse all */
       document.querySelectorAll(".settingRow.active").forEach(function(r){r.classList.remove("active");});
-      /* open this one if it wasn't already open */
       if(!wasActive){
         row.classList.add("active");
-        /* for colour rows open the picker immediately */
         var key=row.getAttribute("data-key");
         if(COLOR_ROWS.indexOf(key)!==-1){
-          row.classList.remove("active"); /* don't expand inline — use overlay */
-          var dotId=key==="bgColor"?"bgColorDot":key+"Dot";
-          openPicker(key, document.getElementById(dotId)? document.getElementById(dotId).closest(".settingRowInner").querySelector(".settingName").textContent : key);
+          row.classList.remove("active");
+          var nameEl=row.querySelector(".settingName");
+          openPicker(key, nameEl ? nameEl.textContent : key);
         }
       }
     });
@@ -395,13 +438,17 @@
   var POSITION_MODES=["solid","gradient","tricolor","multistop","spectrum","monochrome",
                       "duotone","complementary","splitcomp","analogous","triadic","tetradic"];
 
+  /* Modes where Color 1 acts as a base that the scheme is built from */
+  var BASE_MODES=["spectrum","monochrome","complementary","splitcomp","analogous",
+                  "triadic","tetradic","warm","cool","noise"];
+
   function syncColorRows(){
     var mode=val("colorMode").value;
     var needs={
       solid:[1,0,0,0],gradient:[1,1,0,0],tricolor:[1,1,1,0],multistop:[1,1,1,1],
-      spectrum:[1,0,0,0],monochrome:[1,0,0,0],duotone:[1,0,0,0],complementary:[1,0,0,0],
+      spectrum:[1,0,0,0],monochrome:[1,0,0,0],duotone:[1,1,0,0],complementary:[1,0,0,0],
       splitcomp:[1,0,0,0],analogous:[1,0,0,0],triadic:[1,0,0,0],tetradic:[1,0,0,0],
-      warm:[0,0,0,0],cool:[0,0,0,0],noise:[0,0,0,0]
+      warm:[1,0,0,0],cool:[1,0,0,0],noise:[1,0,0,0]
     };
     var show=needs[mode]||[1,0,0,0];
     ["color1Row","color2Row","color3Row","color4Row"].forEach(function(id,i){
@@ -410,6 +457,20 @@
     });
     var dr=document.getElementById("directionRow");
     if(dr) dr.style.display=POSITION_MODES.indexOf(mode)!==-1?"":"none";
+
+    /* relabel Color 1 */
+    var n1=document.querySelector("#color1Row .settingName");
+    if(n1) n1.textContent=BASE_MODES.indexOf(mode)!==-1?"Base colour":"Color 1";
+  }
+
+  /* Dim the Background row when Transparent is on */
+  function syncBgRow(){
+    var row=document.querySelector('.settingRow[data-key="bgColor"]');
+    if(!row) return;
+    var on=val("bgTransparent").value==="true";
+    row.classList.toggle("dimmed", on);
+    if(on) row.setAttribute("data-note","Transparent is on");
+    else row.removeAttribute("data-note");
   }
 
   document.getElementById("colorMode").addEventListener("change",function(){
@@ -434,12 +495,8 @@
   bgTransInput.value="false";
 
   bgToggle.addEventListener("click",function(e){
-    e.stopPropagation(); /* don't trigger row expand */
-    var on=bgTransInput.value==="true";
-    bgTransInput.value=on?"false":"true";
-    bgToggle.setAttribute("data-on",on?"false":"true");
-    bgToggle.textContent=on?"Off":"On";
-    document.getElementById("bgTransparentVal").textContent=on?"Off":"On";
+    e.stopPropagation();
+    setTransparent(bgTransInput.value!=="true");
     schedule();
   });
 
@@ -455,6 +512,8 @@
 
   /* -----------------------------------------------------------------------
      CUSTOM COLOR PICKER
+     The square shows saturation left→right and brightness top→bottom
+     (HSV), so the picker stores HSV and the cursor maths is exact.
   ----------------------------------------------------------------------- */
   var CP={
     overlay:   document.getElementById("colorPickerOverlay"),
@@ -466,7 +525,7 @@
     hexPreview:document.getElementById("cpHexPreview"),
     presetsEl: document.getElementById("cpPresets"),
     title:     document.getElementById("cpTitle"),
-    h:210, s:72, l:61,
+    h:210, s:0.76, v:0.96,
     targetId:null,
     PRESETS:[
       "#3b82f6","#6366f1","#a855f7","#ec4899","#f43f5e",
@@ -475,6 +534,14 @@
       "#fde68a","#bbf7d0","#bfdbfe","#ddd6fe","#fce7f3"
     ]
   };
+
+  function cpSetFromHex(hex){
+    var rgb=hexToRgb(hex);
+    var hsv=rgbToHsv(rgb[0],rgb[1],rgb[2]);
+    /* keep the current hue if the colour is grey (hue is meaningless) */
+    if(hsv[1]>0.001 && hsv[2]>0.001) CP.h=hsv[0];
+    CP.s=hsv[1]; CP.v=hsv[2];
+  }
 
   function cpDrawHue(){
     var c=CP.hueCanvas;
@@ -490,7 +557,7 @@
     c.width=c.offsetWidth||300; c.height=c.offsetHeight||180;
     var cx=c.getContext("2d");
     var gH=cx.createLinearGradient(0,0,c.width,0);
-    gH.addColorStop(0,"hsl("+CP.h+",0%,100%)");
+    gH.addColorStop(0,"#ffffff");
     gH.addColorStop(1,"hsl("+CP.h+",100%,50%)");
     cx.fillStyle=gH; cx.fillRect(0,0,c.width,c.height);
     var gV=cx.createLinearGradient(0,0,0,c.height);
@@ -498,30 +565,14 @@
     cx.fillStyle=gV; cx.fillRect(0,0,c.width,c.height);
   }
 
-  function cpToHex(){ var rgb=hslToRgb(CP.h,CP.s,CP.l); return rgbToHex(rgb[0],rgb[1],rgb[2]); }
-
-  function cpSLFromPos(x,y){
-    var w=CP.slCanvas.width||300, h=CP.slCanvas.height||180;
-    var sx=Math.max(0,Math.min(1,x/w)), ly=Math.max(0,Math.min(1,y/h));
-    var lightness=(1-ly)*(1-sx/2)*100;
-    var saturation=sx===0?0:(100*sx*(1-ly))/(1-Math.abs(2*lightness/100-1)+1e-9);
-    return{s:Math.max(0,Math.min(100,saturation)),l:Math.max(0,Math.min(100,lightness))};
-  }
-
-  function cpPosFromSL(){
-    var w=CP.slCanvas.width||300, h=CP.slCanvas.height||180;
-    var lN=CP.l/100, sN=CP.s/100;
-    var x=sN*(1-Math.abs(2*lN-1))/(2*lN*(1-lN)+1e-9);
-    x=Math.max(0,Math.min(1,x));
-    var ly=1-lN/(1-x/2+1e-9); ly=Math.max(0,Math.min(1,ly));
-    return{x:x*w,y:ly*h};
-  }
+  function cpToHex(){ var rgb=hsvToRgb(CP.h,CP.s,CP.v); return rgbToHex(rgb[0],rgb[1],rgb[2]); }
 
   function cpUpdate(){
     var hw=CP.hueCanvas.width||300;
+    var w=CP.slCanvas.width||300, h=CP.slCanvas.height||180;
     CP.hueCursor.style.left=(CP.h/360*hw)+"px";
-    var pos=cpPosFromSL();
-    CP.slCursor.style.left=pos.x+"px"; CP.slCursor.style.top=pos.y+"px";
+    CP.slCursor.style.left=(CP.s*w)+"px";
+    CP.slCursor.style.top=((1-CP.v)*h)+"px";
     var hex=cpToHex();
     CP.hexInput.value=hex.slice(1).toUpperCase();
     CP.hexPreview.style.background=hex;
@@ -533,8 +584,7 @@
       var btn=document.createElement("button");
       btn.className="cpPresetSwatch"; btn.style.background=hex;
       btn.addEventListener("click",function(){
-        var rgb=hexToRgb(hex); var hsl=rgbToHsl(rgb[0],rgb[1],rgb[2]);
-        CP.h=hsl[0]; CP.s=hsl[1]; CP.l=hsl[2]; cpDrawSL(); cpUpdate();
+        cpSetFromHex(hex); cpDrawSL(); cpUpdate();
       });
       CP.presetsEl.appendChild(btn);
     });
@@ -544,9 +594,7 @@
     CP.targetId=targetId;
     CP.title.textContent="Pick: "+label;
     var el=document.getElementById(targetId);
-    var hex=el?el.value:"#3b82f6";
-    var rgb=hexToRgb(hex); var hsl=rgbToHsl(rgb[0],rgb[1],rgb[2]);
-    CP.h=hsl[0]; CP.s=hsl[1]; CP.l=hsl[2];
+    cpSetFromHex(el?el.value:"#3b82f6");
     CP.overlay.classList.remove("hidden");
     requestAnimationFrame(function(){cpDrawHue();cpDrawSL();cpUpdate();cpBuildPresets();});
   }
@@ -555,7 +603,6 @@
     var hex=cpToHex();
     var el=document.getElementById(CP.targetId);
     if(el) el.value=hex;
-    /* update the colour dot */
     var dotId=CP.targetId==="bgColor"?"bgColorDot":CP.targetId+"Dot";
     var dot=document.getElementById(dotId);
     if(dot) dot.style.background=hex;
@@ -567,22 +614,37 @@
   function cpHueX(e){var rect=CP.hueCanvas.getBoundingClientRect();var cx=e.touches?e.touches[0].clientX:e.clientX;return Math.max(0,Math.min(1,(cx-rect.left)/rect.width));}
   function onHue(e){e.preventDefault();CP.h=cpHueX(e)*360;cpDrawSL();cpUpdate();}
   CP.hueCanvas.addEventListener("mousedown",function(e){onHue(e);CP.hueCanvas.addEventListener("mousemove",onHue);});
-  CP.hueCanvas.addEventListener("touchstart",function(e){onHue(e);CP.hueCanvas.addEventListener("touchmove",onHue);},{passive:false});
+  CP.hueCanvas.addEventListener("touchstart",function(e){onHue(e);CP.hueCanvas.addEventListener("touchmove",onHue,{passive:false});},{passive:false});
   document.addEventListener("mouseup",function(){CP.hueCanvas.removeEventListener("mousemove",onHue);});
   document.addEventListener("touchend",function(){CP.hueCanvas.removeEventListener("touchmove",onHue);});
 
-  /* SL events */
-  function cpSLXY(e){var rect=CP.slCanvas.getBoundingClientRect();var cx=e.touches?e.touches[0].clientX:e.clientX;var cy=e.touches?e.touches[0].clientY:e.clientY;return{x:cx-rect.left,y:cy-rect.top};}
-  function onSL(e){e.preventDefault();var pos=cpSLXY(e);var sl=cpSLFromPos(pos.x,pos.y);CP.s=sl.s;CP.l=sl.l;cpUpdate();}
+  /* saturation / brightness square events */
+  function cpSLXY(e){var rect=CP.slCanvas.getBoundingClientRect();var cx=e.touches?e.touches[0].clientX:e.clientX;var cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-rect.left)/rect.width,y:(cy-rect.top)/rect.height};}
+  function onSL(e){
+    e.preventDefault();
+    var pos=cpSLXY(e);
+    CP.s=Math.max(0,Math.min(1,pos.x));
+    CP.v=1-Math.max(0,Math.min(1,pos.y));
+    cpUpdate();
+  }
   CP.slCanvas.addEventListener("mousedown",function(e){onSL(e);CP.slCanvas.addEventListener("mousemove",onSL);});
-  CP.slCanvas.addEventListener("touchstart",function(e){onSL(e);CP.slCanvas.addEventListener("touchmove",onSL);},{passive:false});
+  CP.slCanvas.addEventListener("touchstart",function(e){onSL(e);CP.slCanvas.addEventListener("touchmove",onSL,{passive:false});},{passive:false});
   document.addEventListener("mouseup",function(){CP.slCanvas.removeEventListener("mousemove",onSL);});
   document.addEventListener("touchend",function(){CP.slCanvas.removeEventListener("touchmove",onSL);});
 
   /* hex input */
   CP.hexInput.addEventListener("input",function(){
     var v=CP.hexInput.value.replace(/[^0-9a-fA-F]/g,"");
-    if(v.length===6){var rgb=hexToRgb("#"+v);var hsl=rgbToHsl(rgb[0],rgb[1],rgb[2]);CP.h=hsl[0];CP.s=hsl[1];CP.l=hsl[2];cpDrawSL();cpUpdate();}
+    if(v.length===6){
+      cpSetFromHex("#"+v);
+      cpDrawSL();
+      /* update cursors and preview without rewriting the text being typed */
+      var hw=CP.hueCanvas.width||300, w=CP.slCanvas.width||300, h=CP.slCanvas.height||180;
+      CP.hueCursor.style.left=(CP.h/360*hw)+"px";
+      CP.slCursor.style.left=(CP.s*w)+"px";
+      CP.slCursor.style.top=((1-CP.v)*h)+"px";
+      CP.hexPreview.style.background="#"+v;
+    }
   });
 
   document.getElementById("cpApply").addEventListener("click",cpApply);
@@ -594,6 +656,7 @@
   ----------------------------------------------------------------------- */
   syncAllBadges();
   syncColorRows();
+  syncBgRow();
   schedule();
 
 })();

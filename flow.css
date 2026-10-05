@@ -1,6 +1,11 @@
 /* =========================================================================
-   FLOW FIELD v2 — flow.css
+   FLOW FIELD v3 — flow.css
    Canvas full-screen · bottom sheet · accordion settings rows
+
+   v3 changes:
+   - .settingHint: small help text inside an opened row.
+   - .settingRow.dimmed: Background row greys out when Transparent is on,
+     with a "Transparent is on" note (text comes from data-note).
    ========================================================================= */
 
 :root {
@@ -111,7 +116,6 @@ html, body {
   background: var(--panel);
   border-top: 1px solid var(--border-strong);
   box-shadow: 0 -12px 40px rgba(0,0,0,0.6);
-  /* closed: only handle visible */
   max-height: calc(var(--row-h) + 14px + env(safe-area-inset-bottom, 0px));
   transition: max-height 0.35s cubic-bezier(0.32, 0.72, 0, 1);
   overflow: hidden;
@@ -202,7 +206,6 @@ html, body {
 .settingRow:last-child { border-bottom: none; }
 .settingRow:active .settingRowInner { background: var(--panel-3); }
 
-/* Top part — always visible, the tappable header */
 .settingRowInner {
   display: flex;
   align-items: center;
@@ -233,7 +236,6 @@ html, body {
   white-space: nowrap;
 }
 
-/* Colour dot — shows the current colour, replaces val badge for colour rows */
 .colorDot {
   width: 28px; height: 28px;
   border-radius: 50%;
@@ -242,7 +244,7 @@ html, body {
   transition: border-color 0.15s ease;
 }
 
-/* ---- Expandable control area — hidden until row is active ---- */
+/* ---- Expandable control area ---- */
 .settingControl {
   display: none;
   padding: 4px 16px 18px;
@@ -251,7 +253,6 @@ html, body {
   display: block;
 }
 
-/* Active row highlight */
 .settingRow.active .settingRowInner {
   background: var(--panel-2);
 }
@@ -259,15 +260,42 @@ html, body {
   color: var(--accent-bright);
 }
 
+/* ---- Small help text inside an opened row ---- */
+.settingHint {
+  margin-top: 10px;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+/* ---- Dimmed row (Background while Transparent is on) ---- */
+.settingRow.dimmed .settingName,
+.settingRow.dimmed .colorDot {
+  opacity: 0.35;
+}
+.settingRow.dimmed .settingName::after {
+  content: attr(data-note);
+}
+.settingRow.dimmed::after {
+  content: attr(data-note);
+  display: block;
+  padding: 0 16px 10px;
+  margin-top: -8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--gold, #ffd257);
+  letter-spacing: 0.04em;
+}
+
 /* ---- Big slider ---- */
 .bigSlider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 48px;          /* big touch target */
+  height: 48px;
   background: transparent;
   cursor: pointer;
-  touch-action: pan-x;  /* horizontal drag = slider, vertical = scroll sheet */
+  touch-action: pan-x;
   display: block;
 }
 .bigSlider::-webkit-slider-runnable-track {
@@ -324,7 +352,7 @@ html, body {
 }
 .bigSelect:focus { border-color: var(--accent); }
 
-/* ---- Toggle button (for bgTransparent) ---- */
+/* ---- Toggle button ---- */
 .toggleWrap { display: flex; }
 .toggleBtn {
   flex: 1;
