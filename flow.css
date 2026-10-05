@@ -1,364 +1,482 @@
 /* =========================================================================
-   FLOW FIELD GENERATOR — flow.css (Android Bottom Sheet & Touch-Optimized)
+   FLOW FIELD v2 — flow.css
+   Canvas full-screen · bottom sheet · accordion settings rows
    ========================================================================= */
 
 :root {
-  --bg-dark: #07080d;
-  --bg-card: #121520;
-  --bg-card-hover: #1b2030;
-  --accent-primary: #7c5cff;
-  --accent-secondary: #38bdf8;
-  --text-main: #f3f4f6;
-  --text-muted: #9ca3af;
-  --border-color: #232a3d;
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  --bg:            #07080d;
+  --panel:         #10131c;
+  --panel-2:       #161a26;
+  --panel-3:       #1c2130;
+  --border:        #242a3a;
+  --border-strong: #333a4d;
+  --text:          #eef0f7;
+  --text-dim:      #8b90a6;
+  --text-dimmer:   #5d6379;
+  --accent:        #7c5cff;
+  --accent-bright: #a58bff;
+  --accent-glow:   rgba(124,92,255,0.4);
+  --radius:        14px;
+  --sheet-radius:  22px;
+  --row-h:         54px;
+  --sheet-open-h:  58vh;
+  --sheet-open-h:  58dvh;
 }
 
 *, *::before, *::after {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+  margin: 0; padding: 0;
   -webkit-tap-highlight-color: transparent;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-dark);
-  color: var(--text-main);
-  min-height: 100vh;
+html, body {
+  width: 100%; height: 100%;
   overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
   touch-action: manipulation;
 }
 
-.toolApp {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100vw;
-  position: relative;
+/* =========================================================================
+   APP WRAPPER — full viewport
+   ========================================================================= */
+.appWrap {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
 }
 
-/* --- Top Header Bar --- */
-.toolTopBar {
-  height: 56px;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background-color: var(--bg-dark);
-  border-bottom: 1px solid var(--border-color);
-  z-index: 10;
-}
-
-.toolTitle {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text-main);
-}
-
-.toolAction {
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  color: #fff;
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  font-size: 1.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(124, 92, 255, 0.35);
-}
-
-.toolAction:active {
-  transform: scale(0.92);
-}
-
-/* --- Canvas Preview Area --- */
-.flowPreview {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-  padding-bottom: 90px; /* Leave space for bottom bar */
-  background: radial-gradient(circle at center, #111422 0%, var(--bg-dark) 100%);
-  position: relative;
-}
-
+/* =========================================================================
+   CANVAS — fills everything, sits behind all UI
+   ========================================================================= */
 #flowCanvas {
-  max-width: 100%;
-  max-height: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: var(--radius-md);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
-  border: 1px solid var(--border-color);
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-}
-
-/* --- Android Bottom Sheet Controls Panel --- */
-.toolView {
-  position: fixed;
-  bottom: 64px; /* Docked right above Export Bar */
-  left: 0;
-  right: 0;
-  background-color: var(--bg-card);
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-lg);
-  border-top: 1px solid var(--border-color);
-  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.6);
-  z-index: 20;
-  max-height: 55vh;
-  overflow-y: auto;
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Category Dividers */
-.flowSection {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--accent-secondary);
-  font-weight: 700;
-  margin-top: 8px;
-  margin-bottom: 2px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-/* Slider Controls */
-.sliderRow {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background-color: var(--bg-dark);
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-}
-
-.sliderTop {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.sliderTop label {
-  font-size: 0.88rem;
-  color: var(--text-main);
-}
-
-.sliderTop .val {
-  background-color: var(--bg-card-hover);
-  border: 1px solid var(--border-color);
-  color: var(--accent-secondary);
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
-  min-width: 40px;
-  text-align: center;
-}
-
-input[type="range"] {
-  -webkit-appearance: none;
-  width: 100%;
-  height: 36px;
-  background: transparent;
-  touch-action: pan-y; /* Crucial for scrolling past sliders without dragging */
-}
-
-input[type="range"]::-webkit-slider-runnable-track {
-  width: 100%;
-  height: 6px;
-  background: var(--border-color);
-  border-radius: 3px;
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  height: 22px;
-  width: 22px;
-  border-radius: 50%;
-  background: var(--accent-primary);
-  margin-top: -8px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-}
-
-/* Input Rows (Selects & Swatches) */
-.fieldRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background-color: var(--bg-dark);
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-  min-height: 48px;
-}
-
-.fieldRow label {
-  font-size: 0.88rem;
-}
-
-select, input[type="number"] {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 0.88rem;
-  outline: none;
-  min-height: 36px;
-}
-
-.colorSwatch {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 2px solid #ffffff;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-}
-
-/* --- Fixed Bottom Export Bar --- */
-.exportBar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 64px;
-  background-color: var(--bg-dark);
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  padding: 0 16px;
-  z-index: 30;
-}
-
-.exportBtn {
-  flex: 1;
-  max-width: 160px;
-  height: 42px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-card);
-  color: var(--text-main);
-  font-weight: 600;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.exportBtn.primary {
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  border: none;
-  color: #ffffff;
-}
-
-.exportBtn:active {
-  transform: scale(0.96);
-}
-
-/* --- Color Picker Modal Overlay --- */
-.cpOverlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-
-.cpOverlay.hidden {
-  display: none !important;
-}
-
-.cpPanel {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 20px;
-  width: 100%;
-  max-width: 300px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cpTitle {
-  font-weight: 700;
-  font-size: 1rem;
-}
-
-.cpSLWrap, .cpHueWrap {
-  position: relative;
-  width: 100%;
-}
-
-.cpSLWrap canvas, .cpHueWrap canvas {
-  width: 100%;
-  border-radius: var(--radius-sm);
   display: block;
 }
 
-.cpCursor, .cpHueCursor {
+/* =========================================================================
+   TOP BAR — minimal, floats above canvas
+   ========================================================================= */
+.topBar {
   position: absolute;
-  width: 14px;
-  height: 14px;
+  top: 0; left: 0; right: 0;
+  height: calc(52px + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(to bottom, rgba(7,8,13,0.85) 0%, transparent 100%);
+  z-index: 50;
+}
+
+.topTitle {
+  flex: 1;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.iconBtn {
+  width: 40px; height: 40px;
   border-radius: 50%;
-  border: 2px solid #ffffff;
+  border: 1px solid var(--border-strong);
+  background: rgba(16,19,28,0.82);
+  color: var(--text);
+  font-size: 1.2rem;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: transform 0.1s ease, background 0.15s ease;
+  flex-shrink: 0;
+}
+.iconBtn:active { transform: scale(0.9); }
+
+/* =========================================================================
+   BOTTOM SHEET
+   ========================================================================= */
+.sheet {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  background: var(--panel);
+  border-top: 1px solid var(--border-strong);
+  box-shadow: 0 -12px 40px rgba(0,0,0,0.6);
+  /* closed: only handle visible */
+  max-height: calc(var(--row-h) + 14px + env(safe-area-inset-bottom, 0px));
+  transition: max-height 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+  overflow: hidden;
+}
+
+.sheet.open {
+  max-height: calc(var(--sheet-open-h) + env(safe-area-inset-bottom, 0px));
+}
+
+/* ---- Handle bar ---- */
+.sheetHandle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 10px;
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sheetPill {
+  width: 36px; height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  flex-shrink: 0;
+}
+
+.sheetLabel {
+  flex: 1;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.generateBtn {
+  background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+  color: #07080d;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  box-shadow: 0 4px 14px var(--accent-glow);
+  transition: transform 0.1s ease;
+  flex-shrink: 0;
+}
+.generateBtn:active { transform: scale(0.95); }
+
+/* =========================================================================
+   SETTINGS LIST — scrollable, inside the sheet
+   ========================================================================= */
+.settingsList {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.settingsList::-webkit-scrollbar { display: none; }
+
+/* ---- Group ---- */
+.settingsGroup {
+  margin-bottom: 2px;
+}
+
+.groupLabel {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent-bright);
+  padding: 10px 16px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ---- Setting row ---- */
+.settingRow {
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  overflow: hidden;
+}
+.settingRow:last-child { border-bottom: none; }
+.settingRow:active .settingRowInner { background: var(--panel-3); }
+
+/* Top part — always visible, the tappable header */
+.settingRowInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--row-h);
+  padding: 0 16px;
+  gap: 12px;
+  transition: background 0.12s ease;
+}
+
+.settingName {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+
+.settingVal {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-bright);
+  background: var(--panel-3);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Colour dot — shows the current colour, replaces val badge for colour rows */
+.colorDot {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  flex-shrink: 0;
+  transition: border-color 0.15s ease;
+}
+
+/* ---- Expandable control area — hidden until row is active ---- */
+.settingControl {
+  display: none;
+  padding: 4px 16px 18px;
+}
+.settingRow.active .settingControl {
+  display: block;
+}
+
+/* Active row highlight */
+.settingRow.active .settingRowInner {
+  background: var(--panel-2);
+}
+.settingRow.active .settingName {
+  color: var(--accent-bright);
+}
+
+/* ---- Big slider ---- */
+.bigSlider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 48px;          /* big touch target */
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-x;  /* horizontal drag = slider, vertical = scroll sheet */
+  display: block;
+}
+.bigSlider::-webkit-slider-runnable-track {
+  height: 6px;
+  background: var(--panel-3);
+  border-radius: 3px;
+  border: 1px solid var(--border-strong);
+}
+.bigSlider::-moz-range-track {
+  height: 6px;
+  background: var(--panel-3);
+  border-radius: 3px;
+}
+.bigSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+  border: 3px solid var(--panel);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5), 0 0 16px var(--accent-glow);
+  margin-top: -12px;
+  cursor: pointer;
+}
+.bigSlider::-moz-range-thumb {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+  border: 3px solid var(--panel);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+  cursor: pointer;
+}
+
+/* ---- Big select ---- */
+.bigSelect {
+  width: 100%;
+  background: var(--panel-3);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 14px 36px 14px 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% - 2px),
+    calc(100% - 11px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  outline: none;
+}
+.bigSelect:focus { border-color: var(--accent); }
+
+/* ---- Toggle button (for bgTransparent) ---- */
+.toggleWrap { display: flex; }
+.toggleBtn {
+  flex: 1;
+  background: var(--panel-3);
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.toggleBtn[data-on="true"] {
+  background: var(--accent);
+  color: #07080d;
+  border-color: transparent;
+}
+
+/* =========================================================================
+   CUSTOM COLOR PICKER OVERLAY
+   ========================================================================= */
+.cpOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.78);
+  backdrop-filter: blur(4px);
+  z-index: 500;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.cpOverlay.hidden { display: none !important; }
+
+.cpPanel {
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 22px 22px 0 0;
+  padding: 20px 16px 16px;
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cpTitle {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.cpSLWrap {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+}
+#cpSLCanvas { width: 100%; height: 100%; display: block; }
+
+.cpCursor {
+  position: absolute;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
 
-.cpHexRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.cpHueWrap {
+  position: relative;
+  width: 100%;
+  height: 28px;
+  border-radius: 14px;
+  cursor: pointer;
+  touch-action: none;
+}
+#cpHueCanvas { width: 100%; height: 100%; display: block; border-radius: 14px; }
+
+.cpHueCursor {
+  position: absolute;
+  top: 50%;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  left: 0;
 }
 
+.cpHexRow { display: flex; align-items: center; gap: 8px; }
+.cpHexLabel { font-size: 15px; font-weight: 700; color: var(--text-dim); }
 .cpHexInput {
   flex: 1;
+  background: var(--panel-3);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  outline: none;
 }
-
+.cpHexInput:focus { border-color: var(--accent); }
 .cpHexPreview {
-  width: 32px;
-  height: 32px;
-  border-radius: 4px;
-  border: 1px solid var(--border-color);
+  width: 38px; height: 38px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  flex-shrink: 0;
 }
 
-.cpButtons {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
-.cpBtn {
-  padding: 8px 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-  background: var(--bg-dark);
-  color: var(--text-main);
+.cpPresets { display: flex; flex-wrap: wrap; gap: 8px; }
+.cpPresetSwatch {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  border: 2px solid transparent;
   cursor: pointer;
+  padding: 0;
+  transition: transform 0.08s ease;
+}
+.cpPresetSwatch:active { transform: scale(0.9); }
+
+.cpButtons { display: flex; gap: 8px; }
+.cpBtn {
+  flex: 1;
+  background: var(--panel-3);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+.cpBtn:active { transform: scale(0.97); }
+.cpBtn.primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+  color: #07080d;
+  border-color: transparent;
 }
 
-.cpBtn.primary {
-  background: var(--accent-primary);
-  border: none;
-}
+.hidden { display: none !important; }

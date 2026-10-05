@@ -1,60 +1,16 @@
-/* =========================================================================
-   FLOW FIELD GENERATOR — sw.js (Service Worker)
-   ========================================================================= */
+const CACHE_NAME = "flow-field-v4";
+const APP_FILES = ["./","./index.html","./flow.css","./flow.js","./manifest.webmanifest"];
 
-const CACHE_NAME = "flow-field-v1"; // Increment this version whenever you update files
-
-const ASSETS_TO_CACHE = [
-  "./",
-  "./index.html",
-  "./flow.css",
-  "./flow.js",
-  "./manifest.webmanifest"
-];
-
-// Install Event: Cache all essential files immediately
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
-  );
-  // Force the waiting service worker to activate immediately
-  self.skipWaiting();
+self.addEventListener("install",(e)=>{
+  e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(APP_FILES)).then(()=>self.skipWaiting()));
 });
-
-// Activate Event: Clear out old caches from previous versions
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
-    })
-  );
-  // Immediately claim all open tabs/clients
-  return self.clients.claim();
+self.addEventListener("activate",(e)=>{
+  e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));
 });
-
-// Fetch Event: Try network first, fall back to cache if offline
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    fetch(event.request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return networkResponse;
-      })
-      .catch(() => {
-        return caches.match(event.request);
-      })
-  );
+self.addEventListener("fetch",(e)=>{
+  if(new URL(e.request.url).origin!==self.location.origin||e.request.method!=="GET")return;
+  e.respondWith(caches.match(e.request).then(cached=>{
+    const net=fetch(e.request).then(r=>{if(r&&r.ok){const c=r.clone();caches.open(CACHE_NAME).then(ca=>ca.put(e.request,c));}return r;}).catch(()=>cached);
+    return cached||net;
+  }));
 });
