@@ -1,593 +1,683 @@
 /* =========================================================================
-   FLOW FIELD — flow.js  (standalone, custom picker, 15 color modes)
+   PATTERN WEAVER — pattern.js (Android & Control-Optimized)
    ========================================================================= */
+
 (function () {
   "use strict";
 
-  var canvas = document.getElementById("flowCanvas");
-  var ctx    = canvas.getContext("2d");
-  var TWO_PI = Math.PI * 2;
-  var renderTimer = null;
+  /* =======================================================================
+     DOM REFERENCES
+     ======================================================================= */
+  const canvas = document.getElementById("patternCanvas");
+  let ctx = canvas.getContext("2d");
 
-  var sizes = {
-    square: [1500, 1500],
-    portrait: [900, 1600],
-    landscape: [1600, 900],
-    a17: [1080, 2340],
-    desktop: [1920, 1080]
+  const patternStyle  = document.getElementById("patternStyle");
+  const seed          = document.getElementById("seed");
+  const btnRandomizeSeed = document.getElementById("btnRandomizeSeed");
+  const btnRandomizeAll  = document.getElementById("btnRandomizeAll");
+  const btnRandomizeTop  = document.getElementById("btnRandomizeTop");
+
+  // Harmony generator
+  const harmonyBase      = document.getElementById("harmonyBase");
+  const harmonyBaseSwatch = document.getElementById("harmonyBaseSwatch");
+  const harmonyRule      = document.getElementById("harmonyRule");
+  const btnApplyHarmony  = document.getElementById("btnApplyHarmony");
+
+  // Active color editor
+  const colorTabs        = Array.from(document.querySelectorAll(".colorTab"));
+  const activeColorLabel = document.getElementById("activeColorLabel");
+  const activeColorInput = document.getElementById("activeColorInput");
+  const activeColorSwatch = document.getElementById("activeColorSwatch");
+  const hueSlider     = document.getElementById("hueSlider");
+  const satSlider     = document.getElementById("satSlider");
+  const lightSlider   = document.getElementById("lightSlider");
+  const opacitySlider = document.getElementById("opacitySlider");
+  const valHue        = document.getElementById("valHue");
+  const valSat        = document.getElementById("valSat");
+  const valLight      = document.getElementById("valLight");
+  const valOpacity    = document.getElementById("valOpacity");
+
+  // Background
+  const bgStyle       = document.getElementById("bgStyle");
+  const bgDir         = document.getElementById("bgDir");
+
+  // Saved custom palettes
+  const palettePresetList = document.getElementById("palettePresetList");
+  const btnSavePalette    = document.getElementById("btnSavePalette");
+  const btnLoadPalette    = document.getElementById("btnLoadPalette");
+  const btnDeletePalette  = document.getElementById("btnDeletePalette");
+
+  const symmetry      = document.getElementById("symmetry");
+  const scale         = document.getElementById("scale");
+  const density       = document.getElementById("density");
+  const lineWeight    = document.getElementById("lineWeight");
+  const rotation      = document.getElementById("rotation");
+
+  // Style modules
+  const starPoints    = document.getElementById("starPoints");
+  const ringCount     = document.getElementById("ringCount");
+  const tessellation  = document.getElementById("tessellation");
+  const weaveStyle    = document.getElementById("weaveStyle");
+  const loopCount     = document.getElementById("loopCount");
+  const ribbonWidth   = document.getElementById("ribbonWidth");
+  const motifType     = document.getElementById("motifType");
+  const tileRotation  = document.getElementById("tileRotation");
+  const tileOffset    = document.getElementById("tileOffset");
+  const ruleSet       = document.getElementById("ruleSet");
+  const mutationRate  = document.getElementById("mutationRate");
+  const growthSteps   = document.getElementById("growthSteps");
+
+  // Export
+  const exportScale   = document.getElementById("exportScale");
+  const exportBg      = document.getElementById("exportBg");
+  const exportName    = document.getElementById("exportName");
+  const btnExportPng  = document.getElementById("btnExportPng");
+  const btnExportJpg  = document.getElementById("btnExportJpg");
+  const btnCopySeed   = document.getElementById("btnCopySeed");
+
+  // Full-settings presets
+  const presetList    = document.getElementById("presetList");
+  const btnSavePreset = document.getElementById("btnSavePreset");
+  const btnLoadPreset = document.getElementById("btnLoadPreset");
+  const btnDeletePreset = document.getElementById("btnDeletePreset");
+
+  // Style groups
+  const styleIslamic  = document.getElementById("styleIslamic");
+  const styleCeltic   = document.getElementById("styleCeltic");
+  const styleMotif    = document.getElementById("styleMotif");
+  const styleProcedural = document.getElementById("styleProcedural");
+
+  // Value displays
+  const valScale        = document.getElementById("valScale");
+  const valDensity      = document.getElementById("valDensity");
+  const valLineWeight   = document.getElementById("valLineWeight");
+  const valMutationRate = document.getElementById("valMutationRate");
+
+  /* =======================================================================
+     CANVAS SIZE (STRICTLY LOCKED DIMENSIONS)
+     ======================================================================= */
+  const CANVAS_SIZE = 900;
+  canvas.width = CANVAS_SIZE;
+  canvas.height = CANVAS_SIZE;
+
+  /* =======================================================================
+     COLOR STATE
+     ======================================================================= */
+  const PATTERN_SLOTS = ["color1", "color2", "color3", "color4"];
+  const ALL_SLOTS = ["color1", "color2", "color3", "color4", "bg", "bg2"];
+
+  const colors = {
+    color1: "#7c5cff",
+    color2: "#38bdf8",
+    color3: "#f472b6",
+    color4: "#ffd257",
+    bg:     "#07080d",
+    bg2:    "#1c2130"
   };
 
-  /* -----------------------------------------------------------------------
-     SEEDED RANDOM
-  ----------------------------------------------------------------------- */
-  function mulberry32(a) {
-    return function () {
-      a |= 0; a = (a + 0x6D2B79F5) | 0;
-      var t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
+  const opacities = {
+    color1: 100,
+    color2: 100,
+    color3: 100,
+    color4: 100,
+    bg:     100,
+    bg2:    100
+  };
 
-  /* -----------------------------------------------------------------------
-     PERLIN NOISE
-  ----------------------------------------------------------------------- */
-  function makePerlin(rand) {
-    var perm = new Uint8Array(256);
-    for (var i = 0; i < 256; i++) perm[i] = i;
-    for (var i = 255; i > 0; i--) {
-      var j = Math.floor(rand() * (i + 1));
-      var tmp = perm[i]; perm[i] = perm[j]; perm[j] = tmp;
-    }
-    var p = new Uint8Array(512);
-    for (var i = 0; i < 512; i++) p[i] = perm[i & 255];
+  let activeSlot = "color1";
 
-    function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
-    function lerp(a, b, t) { return a + t * (b - a); }
-    function grad(h, dx, dy) {
-      switch (h & 7) {
-        case 0: return  dx + dy;
-        case 1: return -dx + dy;
-        case 2: return  dx - dy;
-        case 3: return -dx - dy;
-        case 4: return  dx;
-        case 5: return -dx;
-        case 6: return  dy;
-        default: return -dy;
-      }
-    }
-    return function (x, y) {
-      var X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
-      x -= Math.floor(x); y -= Math.floor(y);
-      var u = fade(x), v = fade(y);
-      var A = p[X] + Y, B = p[X + 1] + Y;
-      return lerp(
-        lerp(grad(p[A],     x,     y),   grad(p[B],     x - 1, y),   u),
-        lerp(grad(p[A + 1], x,     y - 1), grad(p[B + 1], x - 1, y - 1), u),
-        v
-      );
-    };
-  }
-
-  /* -----------------------------------------------------------------------
+  /* =======================================================================
      COLOR HELPERS
-  ----------------------------------------------------------------------- */
+     ======================================================================= */
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
   function hexToRgb(hex) {
-    var n = parseInt(hex.replace("#",""), 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    let h = String(hex || "").replace("#", "");
+    if (h.length === 3) h = h.split("").map(c => c + c).join("");
+    const num = parseInt(h, 16);
+    if (isNaN(num)) return { r: 124, g: 92, b: 255 };
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
   }
 
   function rgbToHex(r, g, b) {
-    return "#" + [r, g, b].map(function(v){
-      return ("0" + Math.round(v).toString(16)).slice(-2);
-    }).join("");
-  }
-
-  function hslToRgb(h, s, l) {
-    h /= 360; s /= 100; l /= 100;
-    if (s === 0) { var v = Math.round(l * 255); return [v, v, v]; }
-    var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    var p2 = 2 * l - q;
-    function hue(t) {
-      if (t < 0) t += 1; if (t > 1) t -= 1;
-      if (t < 1/6) return p2 + (q - p2) * 6 * t;
-      if (t < 1/2) return q;
-      if (t < 2/3) return p2 + (q - p2) * (2/3 - t) * 6;
-      return p2;
-    }
-    return [Math.round(hue(h + 1/3) * 255),
-            Math.round(hue(h)       * 255),
-            Math.round(hue(h - 1/3) * 255)];
+    const to = v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, "0");
+    return "#" + to(r) + to(g) + to(b);
   }
 
   function rgbToHsl(r, g, b) {
     r /= 255; g /= 255; b /= 255;
-    var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-    var h = 0, s = 0, l = (mx + mn) / 2;
-    if (mx !== mn) {
-      var d = mx - mn;
-      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
-      if (mx === r)      h = (g - b) / d + (g < b ? 6 : 0);
-      else if (mx === g) h = (b - r) / d + 2;
-      else               h = (r - g) / d + 4;
-      h /= 6;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0, l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
     }
-    return [h * 360, s * 100, l * 100];
+    return { h: clamp(h, 0, 360), s: clamp(s * 100, 0, 100), l: clamp(l * 100, 0, 100) };
   }
 
-  function lerpRgb(c1, c2, t) {
-    return [
-      Math.round(c1[0] + (c2[0] - c1[0]) * t),
-      Math.round(c1[1] + (c2[1] - c1[1]) * t),
-      Math.round(c1[2] + (c2[2] - c1[2]) * t)
-    ];
+  function hslToRgb(h, s, l) {
+    h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+    if (s === 0) { const v = l * 255; return { r: v, g: v, b: v }; }
+    const hue = h / 360;
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    const hue2rgb = t => {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    return { r: hue2rgb(hue + 1 / 3) * 255, g: hue2rgb(hue) * 255, b: hue2rgb(hue - 1 / 3) * 255 };
   }
 
-  function multiLerp(stops, t) {
-    if (t <= 0) return stops[0];
-    if (t >= 1) return stops[stops.length - 1];
-    var seg = (stops.length - 1) * t;
-    var i   = Math.floor(seg);
-    return lerpRgb(stops[i], stops[i + 1], seg - i);
+  function hexToHsl(hex) { const c = hexToRgb(hex); return rgbToHsl(c.r, c.g, c.b); }
+  function hslToHex(h, s, l) { const c = hslToRgb(h, s, l); return rgbToHex(c.r, c.g, c.b); }
+  function hexToRgba(hex, alpha) { const c = hexToRgb(hex); return `rgba(${c.r},${c.g},${c.b},${clamp(alpha, 0, 1)})`; }
+
+  function rgbaOf(slot, alpha) {
+    const hex = colors[slot] || "#ffffff";
+    const op = (opacities[slot] == null ? 100 : opacities[slot]) / 100;
+    return hexToRgba(hex, alpha * op);
   }
 
-  /* -----------------------------------------------------------------------
-     COLOR MODE LOGIC
-  ----------------------------------------------------------------------- */
-  function noiseScaleFor(fs) {
-    return 0.0065 - (fs - 1) * (0.0065 - 0.0006) / 99;
+  function pickColor(minA, maxA) {
+    const slot = PATTERN_SLOTS[Math.floor(rng() * PATTERN_SLOTS.length)];
+    return rgbaOf(slot, minA + rng() * (maxA - minA));
   }
 
-  function pickColor(s, x, y, W, H, rand, noiseVal) {
-    var t;
-    switch (s.direction) {
-      case "vertical":  t = y / H; break;
-      case "diagonal":  t = (x / W + y / H) / 2; break;
-      case "radial":
-        var dx = x / W - 0.5, dy = y / H - 0.5;
-        t = Math.min(1, Math.sqrt(dx * dx + dy * dy) * 2);
-        break;
-      case "chaotic":   t = rand(); break;
-      default:          t = x / W; // horizontal
+  function pickColorInfo(minA, maxA) {
+    const slot = PATTERN_SLOTS[Math.floor(rng() * PATTERN_SLOTS.length)];
+    const alpha = minA + rng() * (maxA - minA);
+    return { slot: slot, color: rgbaOf(slot, alpha), fill: rgbaOf(slot, alpha * 0.22) };
+  }
+
+  /* =======================================================================
+     HARMONY GENERATOR
+     ======================================================================= */
+  function harmonyColors(baseHex, rule) {
+    const base = hexToHsl(baseHex), h = base.h, s = base.s, l = base.l;
+    const hue = deg => (((h + deg) % 360) + 360) % 360;
+    let arr = [];
+    if (rule === "complementary") {
+      arr = [{ h, s, l }, { h: hue(180), s, l }, { h, s: Math.max(0, s - 15), l: Math.min(100, l + 15) }, { h: hue(180), s: Math.max(0, s - 15), l: Math.min(100, l + 15) }];
+    } else if (rule === "analogous") {
+      arr = [{ h: hue(-40), s, l }, { h: hue(-20), s, l }, { h: hue(20), s, l }, { h: hue(40), s, l }];
+    } else if (rule === "triadic") {
+      arr = [{ h, s, l }, { h: hue(120), s, l }, { h: hue(240), s, l }, { h, s: Math.max(0, s - 10), l: Math.min(100, l + 18) }];
+    } else if (rule === "split") {
+      arr = [{ h, s, l }, { h: hue(150), s, l }, { h: hue(210), s, l }, { h: hue(-15), s: Math.max(0, s - 10), l: Math.min(100, l + 12) }];
     }
-    t = Math.max(0, Math.min(1, t));
-
-    var hsl1 = rgbToHsl(s.c1[0], s.c1[1], s.c1[2]);
-    var h1 = hsl1[0];
-
-    switch (s.mode) {
-      case "solid":
-        return s.c1;
-      case "gradient":
-        return lerpRgb(s.c1, s.c2, t);
-      case "tricolor":
-        return t < 0.5
-          ? lerpRgb(s.c1, s.c2, t * 2)
-          : lerpRgb(s.c2, s.c3, (t - 0.5) * 2);
-      case "multistop":
-        return multiLerp([s.c1, s.c2, s.c3, s.c4], t);
-      case "spectrum":
-        return hslToRgb((h1 + t * 360) % 360, 72, 58);
-      case "monochrome":
-        return hslToRgb(h1, hsl1[1], 15 + t * 70);
-      case "duotone":
-        return t < 0.5 ? lerpRgb([10, 10, 20], s.c1, t * 2)
-                       : lerpRgb(s.c1, [230, 230, 240], (t - 0.5) * 2);
-      case "complementary": {
-        var hComp = (h1 + 180) % 360;
-        return hslToRgb(t < 0.5 ? h1 : hComp, 65, 55);
-      }
-      case "splitcomp": {
-        var hues = [h1, (h1 + 150) % 360, (h1 + 210) % 360];
-        return hslToRgb(hues[Math.floor(t * 3) % 3], 65, 55);
-      }
-      case "analogous": {
-        var ha = (h1 - 30 + t * 60) % 360;
-        if (ha < 0) ha += 360;
-        return hslToRgb(ha, 68, 55);
-      }
-      case "triadic": {
-        var hues3 = [h1, (h1 + 120) % 360, (h1 + 240) % 360];
-        return hslToRgb(hues3[Math.floor(t * 3) % 3], 65, 55);
-      }
-      case "tetradic": {
-        var hues4 = [h1, (h1+90)%360, (h1+180)%360, (h1+270)%360];
-        return hslToRgb(hues4[Math.floor(t * 4) % 4], 65, 55);
-      }
-      case "warm": {
-        var hw = (s.seed + t * 60) % 60;
-        return hslToRgb(hw, 75, 55);
-      }
-      case "cool": {
-        var hc = 180 + (s.seed + t * 100) % 100;
-        return hslToRgb(hc, 65, 55);
-      }
-      case "noise": {
-        var hn = ((noiseVal + 1) / 2) * 360;
-        return hslToRgb(hn, 70, 55);
-      }
-      default:
-        return s.c1;
-    }
+    return arr.map(c => hslToHex(c.h, clamp(c.s, 0, 100), clamp(c.l, 0, 100)));
   }
 
-  /* -----------------------------------------------------------------------
-     STATE & RENDER
-  ----------------------------------------------------------------------- */
-  function schedule() {
-    if (renderTimer) clearTimeout(renderTimer);
-    renderTimer = setTimeout(render, 50);
+  function applyHarmony() {
+    const generated = harmonyColors(harmonyBase.value, harmonyRule.value);
+    generated.forEach((hex, i) => {
+      colors[PATTERN_SLOTS[i]] = hex;
+      opacities[PATTERN_SLOTS[i]] = 100;
+    });
+    updateColorEditor();
   }
 
-  function readState() {
-    return {
-      seed:          parseInt(document.getElementById("seed").value, 10) || 1,
-      particles:     parseInt(document.getElementById("particles").value, 10),
-      steps:         parseInt(document.getElementById("steps").value, 10),
-      stepSize:      parseFloat(document.getElementById("stepSize").value),
-      featureSize:   parseInt(document.getElementById("featureSize").value, 10),
-      curl:          parseFloat(document.getElementById("curl").value),
-      lineWidth:     parseFloat(document.getElementById("lineWidth").value),
-      opacity:       parseFloat(document.getElementById("opacity").value),
-      mode:          document.getElementById("colorMode").value,
-      direction:     document.getElementById("direction").value,
-      size:          document.getElementById("size").value,
-      c1:            hexToRgb(document.getElementById("color1").value),
-      c2:            hexToRgb(document.getElementById("color2").value),
-      c3:            hexToRgb(document.getElementById("color3").value),
-      c4:            hexToRgb(document.getElementById("color4").value),
-      bgColor:       document.getElementById("bgColor").value,
-      bgTransparent: document.getElementById("bgTransparent").checked
+  /* =======================================================================
+     COLOR UI & BG
+     ======================================================================= */
+  const SLOT_LABELS = { color1: "Color 1", color2: "Color 2", color3: "Color 3", color4: "Color 4", bg: "Background", bg2: "Background 2" };
+
+  function updateColorEditor() {
+    const isGradient = bgStyle.value !== "solid";
+    const bg2Btn = document.getElementById("tab_bg2");
+    if (bg2Btn) bg2Btn.classList.toggle("hidden", !isGradient);
+    if (!isGradient && activeSlot === "bg2") activeSlot = "bg";
+
+    colorTabs.forEach(btn => {
+      const slot = btn.dataset.slot;
+      btn.style.background = colors[slot] || "#ffffff";
+      btn.classList.toggle("active", slot === activeSlot);
+    });
+
+    activeColorLabel.textContent = SLOT_LABELS[activeSlot] || activeSlot;
+    const hex = colors[activeSlot];
+    const hsl = hexToHsl(hex);
+    activeColorInput.value = hex;
+    if (activeColorSwatch) activeColorSwatch.style.background = hex;
+
+    hueSlider.value = Math.round(hsl.h); satSlider.value = Math.round(hsl.s); lightSlider.value = Math.round(hsl.l);
+    valHue.textContent = Math.round(hsl.h); valSat.textContent = Math.round(hsl.s); valLight.textContent = Math.round(hsl.l);
+    opacitySlider.value = opacities[activeSlot] == null ? 100 : opacities[activeSlot];
+    valOpacity.textContent = opacitySlider.value;
+  }
+
+  function updateBgControls() {
+    const dirRow = document.getElementById("bgDirRow");
+    if (dirRow) dirRow.classList.toggle("hidden", bgStyle.value !== "linear");
+    updateColorEditor();
+  }
+
+  /* =======================================================================
+     SEEDED RNG
+     ======================================================================= */
+  function hashSeed(str) {
+    let h = 2166136261 >>> 0;
+    const s = String(str || "");
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0; let t = a;
+      t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
   }
 
-  function render() {
-    var s = readState();
-    var W = sizes[s.size] ? sizes[s.size][0] : 1500;
-    var H = sizes[s.size] ? sizes[s.size][1] : 1500;
-    
-    canvas.width = W; canvas.height = H;
+  let rng = mulberry32(hashSeed(seed.value));
+  function reseed() { rng = mulberry32(hashSeed(seed.value || "default")); }
 
-    if (s.bgTransparent) {
-      ctx.clearRect(0, 0, W, H);
-    } else {
-      ctx.fillStyle = s.bgColor;
-      ctx.fillRect(0, 0, W, H);
+  /* =======================================================================
+     DRAW HELPERS & STYLES
+     ======================================================================= */
+  function prepareContext(c) {
+    c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = "source-over";
+    c.lineCap = "butt"; c.lineJoin = "miter"; c.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  }
+
+  function resetDrawingState(c) { c.lineCap = "butt"; c.lineJoin = "miter"; c.globalAlpha = 1; c.globalCompositeOperation = "source-over"; }
+
+  function paintBackground(c) {
+    const style = bgStyle.value;
+    if (style === "solid") {
+      c.fillStyle = rgbaOf("bg", 1); c.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE); return;
     }
+    let g;
+    if (style === "radial") {
+      g = c.createRadialGradient(CANVAS_SIZE / 2, CANVAS_SIZE / 2, 0, CANVAS_SIZE / 2, CANVAS_SIZE / 2, CANVAS_SIZE * 0.62);
+    } else {
+      const dir = bgDir.value;
+      const coords = {
+        "to-bottom": [0, 0, 0, CANVAS_SIZE], "to-top": [0, CANVAS_SIZE, 0, 0],
+        "to-right": [0, 0, CANVAS_SIZE, 0], "to-left": [CANVAS_SIZE, 0, 0, 0],
+        "to-bottom-right": [0, 0, CANVAS_SIZE, CANVAS_SIZE], "to-bottom-left": [0, CANVAS_SIZE, 0, CANVAS_SIZE],
+        "to-top-right": [0, CANVAS_SIZE, CANVAS_SIZE, 0], "to-top-left": [CANVAS_SIZE, CANVAS_SIZE, 0, 0]
+      };
+      const d = coords[dir] || coords["to-bottom"];
+      g = c.createLinearGradient(d[0], d[1], d[2], d[3]);
+    }
+    g.addColorStop(0, rgbaOf("bg", 1)); g.addColorStop(1, rgbaOf("bg2", 1));
+    c.fillStyle = g; c.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  }
 
-    var rand  = mulberry32(s.seed);
-    var noise = makePerlin(rand);
-    var scale = noiseScaleFor(s.featureSize);
+  function drawIslamic() {
+    const cx = CANVAS_SIZE / 2, cy = CANVAS_SIZE / 2, points = parseInt(starPoints.value, 10), rings = parseInt(ringCount.value, 10);
+    const sym = parseInt(symmetry.value, 10), sc = parseFloat(scale.value), dens = parseInt(density.value, 10) / 100;
+    const lw = parseInt(lineWeight.value, 10), rot = parseInt(rotation.value, 10) * Math.PI / 180, tess = tessellation.value;
+    const baseRadius = (CANVAS_SIZE / 2) * 0.42 * sc;
 
-    var cols  = Math.max(1, Math.ceil(Math.sqrt(s.particles * (W / H))));
-    var rows  = Math.max(1, Math.ceil(s.particles / cols));
-    var cellW = W / cols, cellH = H / rows;
-
-    ctx.lineCap     = "round";
-    ctx.lineJoin    = "round";
-    ctx.lineWidth   = s.lineWidth;
-    ctx.globalAlpha = s.opacity;
-
-    for (var r = 0; r < rows; r++) {
-      for (var c = 0; c < cols; c++) {
-        var px = c * cellW + rand() * cellW;
-        var py = r * cellH + rand() * cellH;
-
-        var nv = noise(px * scale, py * scale);
-        var col = pickColor(s, px, py, W, H, rand, nv);
-
-        ctx.strokeStyle = "rgb(" + col[0] + "," + col[1] + "," + col[2] + ")";
+    for (let r = 1; r <= rings; r++) {
+      const radius = baseRadius * (r / rings), ringPoints = sym * r;
+      for (let i = 0; i < ringPoints; i++) {
+        const angle = (i / ringPoints) * Math.PI * 2 + rot;
+        const sx = cx + Math.cos(angle) * radius, sy = cy + Math.sin(angle) * radius;
+        const starR = radius * 0.35 * (1 - dens * 0.4) * (1 + rng() * 0.15);
+        drawStar(sx, sy, points, starR, points * 1.5, lw, pickColor(0.6, 0.9));
+      }
+    }
+    drawStar(cx, cy, points * 2, baseRadius * 0.45, points * 3, lw * 1.5, rgbaOf("color1", 1));
+    if (tess !== "star") {
+      ctx.strokeStyle = rgbaOf("color2", 0.35); ctx.lineWidth = Math.max(1, lw * 0.5);
+      for (let r = 0; r < rings; r++) {
+        const radius = baseRadius * ((r + 1) / rings), ringPoints = sym * (r + 1);
         ctx.beginPath();
-        var x = px, y = py;
-        ctx.moveTo(x, y);
-        for (var i = 0; i < s.steps; i++) {
-          var a = noise(x * scale, y * scale) * TWO_PI * s.curl;
-          x += Math.cos(a) * s.stepSize;
-          y += Math.sin(a) * s.stepSize;
-          ctx.lineTo(x, y);
+        for (let i = 0; i <= ringPoints; i++) {
+          const angle = (i / ringPoints) * Math.PI * 2 + rot;
+          const x = cx + Math.cos(angle) * radius, y = cy + Math.sin(angle) * radius;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
       }
     }
-    ctx.globalAlpha = 1;
   }
 
-  /* -----------------------------------------------------------------------
-     EXPORT
-  ----------------------------------------------------------------------- */
-  function exportPNG() {
-    var seed = document.getElementById("seed").value;
-    canvas.toBlob(function (blob) {
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = "flowfield-" + seed + ".png";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-    }, "image/png");
-  }
-
-  function randomSeed() {
-    document.getElementById("seed").value = Math.floor(Math.random() * 900000) + 100000;
-    schedule();
-  }
-
-  /* -----------------------------------------------------------------------
-     SYNC DYNAMIC CONTROLS
-  ----------------------------------------------------------------------- */
-  function syncDynamicControls() {
-    var mode = document.getElementById("colorMode").value;
-    var needs = {
-      solid:         [1, 0, 0, 0],
-      gradient:      [1, 1, 0, 0],
-      tricolor:      [1, 1, 1, 0],
-      multistop:     [1, 1, 1, 1],
-      spectrum:      [1, 0, 0, 0],
-      monochrome:    [1, 0, 0, 0],
-      duotone:       [1, 0, 0, 0],
-      complementary: [1, 0, 0, 0],
-      splitcomp:     [1, 0, 0, 0],
-      analogous:     [1, 0, 0, 0],
-      triadic:       [1, 0, 0, 0],
-      tetradic:      [1, 0, 0, 0],
-      warm:          [0, 0, 0, 0],
-      cool:          [0, 0, 0, 0],
-      noise:         [0, 0, 0, 0]
-    };
-    var show = needs[mode] || [1, 0, 0, 0];
-    ["color1Row", "color2Row", "color3Row", "color4Row"].forEach(function (id, i) {
-      document.getElementById(id).classList.toggle("hidden", !show[i]);
-    });
-
-    var positionBased = ["solid","gradient","tricolor","multistop","spectrum",
-                         "monochrome","duotone","complementary","splitcomp",
-                         "analogous","triadic","tetradic"];
-    var showDir = positionBased.indexOf(mode) !== -1;
-    document.getElementById("directionRow").classList.toggle("hidden", !showDir);
-  }
-
-  /* -----------------------------------------------------------------------
-     CUSTOM COLOR PICKER
-  ----------------------------------------------------------------------- */
-  var CP = {
-    overlay:   document.getElementById("colorPickerOverlay"),
-    slCanvas:  document.getElementById("cpSLCanvas"),
-    hueCanvas: document.getElementById("cpHueCanvas"),
-    slCursor:  document.getElementById("cpSLCursor"),
-    hueCursor: document.getElementById("cpHueCursor"),
-    hexInput:  document.getElementById("cpHexInput"),
-    hexPreview:document.getElementById("cpHexPreview"),
-    presets:   document.getElementById("cpPresets"),
-    title:     document.getElementById("cpTitle"),
-    currentTarget: null,
-    h: 0, s: 100, l: 50,
-
-    PRESETS: [
-      "#3b82f6","#6366f1","#a855f7","#ec4899","#f43f5e",
-      "#f97316","#eab308","#22c55e","#14b8a6","#06b6d4",
-      "#ffffff","#94a3b8","#475569","#1e293b","#000000",
-      "#fde68a","#bbf7d0","#bfdbfe","#ddd6fe","#fce7f3"
-    ]
-  };
-
-  function drawHueStrip() {
-    var c = CP.hueCanvas;
-    var w = c.width, h = c.height;
-    c.width  = c.offsetWidth  || 260;
-    c.height = c.offsetHeight || 24;
-    w = c.width; h = c.height;
-    var grd = c.getContext("2d").createLinearGradient(0, 0, w, 0);
-    for (var i = 0; i <= 12; i++) {
-      grd.addColorStop(i / 12, "hsl(" + (i / 12 * 360) + ",100%,50%)");
+  function drawStar(cx, cy, points, outerR, innerR, lw, color) {
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+      const angle = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+      const r = i % 2 === 0 ? outerR : innerR;
+      const x = cx + Math.cos(angle) * r, y = cy + Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
-    var cx = c.getContext("2d");
-    cx.fillStyle = grd;
-    cx.fillRect(0, 0, w, h);
+    ctx.closePath(); ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.stroke();
   }
 
-  function drawSLSquare(hue) {
-    var c = CP.slCanvas;
-    c.width  = c.offsetWidth  || 260;
-    c.height = c.offsetHeight || 200;
-    var w = c.width, h = c.height;
-    var cx = c.getContext("2d");
-    var gH = cx.createLinearGradient(0, 0, w, 0);
-    gH.addColorStop(0, "hsl(" + hue + ",0%,100%)");
-    gH.addColorStop(1, "hsl(" + hue + ",100%,50%)");
-    cx.fillStyle = gH;
-    cx.fillRect(0, 0, w, h);
-    var gV = cx.createLinearGradient(0, 0, 0, h);
-    gV.addColorStop(0, "rgba(0,0,0,0)");
-    gV.addColorStop(1, "rgba(0,0,0,1)");
-    cx.fillStyle = gV;
-    cx.fillRect(0, 0, w, h);
-  }
+  function drawCeltic() {
+    const cx = CANVAS_SIZE / 2, cy = CANVAS_SIZE / 2, loops = parseInt(loopCount.value, 10), sym = parseInt(symmetry.value, 10);
+    const sc = parseFloat(scale.value), dens = parseInt(density.value, 10) / 100, lw = parseInt(lineWeight.value, 10);
+    const rot = parseInt(rotation.value, 10) * Math.PI / 180, weave = weaveStyle.value, widthChoice = ribbonWidth.value;
+    const ribbonW = widthChoice === "thin" ? lw : widthChoice === "medium" ? lw * 1.8 : lw * 3;
+    const baseRadius = (CANVAS_SIZE / 2) * 0.42 * sc;
 
-  function hslFromSLPos(x, y) {
-    var w = CP.slCanvas.width  || 260;
-    var h = CP.slCanvas.height || 200;
-    var sx = Math.max(0, Math.min(1, x / w));
-    var ly = Math.max(0, Math.min(1, y / h));
-    var lightness = (1 - ly) * (1 - sx / 2) * 100;
-    var saturation = sx === 0 ? 0 : (100 * sx * (1 - ly)) / (1 - Math.abs(2 * lightness / 100 - 1) + 1e-9);
-    saturation = Math.max(0, Math.min(100, saturation));
-    lightness  = Math.max(0, Math.min(100, lightness));
-    return { s: saturation, l: lightness };
-  }
-
-  function slPosFromHSL(s, l) {
-    var w = CP.slCanvas.width  || 260;
-    var h = CP.slCanvas.height || 200;
-    var lNorm = l / 100;
-    var sNorm = s / 100;
-    var x = sNorm * (1 - Math.abs(2 * lNorm - 1)) / (2 * lNorm * (1 - lNorm) + 1e-9);
-    x = Math.max(0, Math.min(1, x));
-    var ly = 1 - lNorm / (1 - x / 2 + 1e-9);
-    ly = Math.max(0, Math.min(1, ly));
-    return { x: x * w, y: ly * h };
-  }
-
-  function updateCursors() {
-    var hueW = CP.hueCanvas.width || 260;
-    CP.hueCursor.style.left = (CP.h / 360 * hueW) + "px";
-    var pos = slPosFromHSL(CP.s, CP.l);
-    CP.slCursor.style.left = pos.x + "px";
-    CP.slCursor.style.top  = pos.y + "px";
-    var hex = rgbToHex.apply(null, hslToRgb(CP.h, CP.s, CP.l));
-    CP.hexInput.value   = hex.slice(1);
-    CP.hexPreview.style.background = hex;
-  }
-
-  function openPicker(targetId, labelText) {
-    CP.currentTarget = targetId;
-    CP.title.textContent = "Pick: " + labelText;
-    var hex = document.getElementById(targetId).value || "#3b82f6";
-    var rgb = hexToRgb(hex);
-    var hsl = rgbToHsl(rgb[0], rgb[1], rgb[2]);
-    CP.h = hsl[0]; CP.s = hsl[1]; CP.l = hsl[2];
-    CP.overlay.classList.remove("hidden");
-    requestAnimationFrame(function () {
-      drawHueStrip();
-      drawSLSquare(CP.h);
-      updateCursors();
-      buildPresets();
-    });
-  }
-
-  function buildPresets() {
-    CP.presets.innerHTML = "";
-    CP.PRESETS.forEach(function (hex) {
-      var btn = document.createElement("button");
-      btn.className = "cpPresetSwatch";
-      btn.style.background = hex;
-      btn.title = hex;
-      btn.addEventListener("click", function () {
-        var rgb = hexToRgb(hex);
-        var hsl = rgbToHsl(rgb[0], rgb[1], rgb[2]);
-        CP.h = hsl[0]; CP.s = hsl[1]; CP.l = hsl[2];
-        drawSLSquare(CP.h);
-        updateCursors();
-      });
-      CP.presets.appendChild(btn);
-    });
-  }
-
-  function applyPicker() {
-    var hex = rgbToHex.apply(null, hslToRgb(CP.h, CP.s, CP.l));
-    var hiddenInput = document.getElementById(CP.currentTarget);
-    var swatchId    = CP.currentTarget + "Swatch";
-    var swatch      = document.getElementById(swatchId);
-    hiddenInput.value        = hex;
-    if (swatch) swatch.style.background = hex;
-    CP.overlay.classList.add("hidden");
-    schedule();
-  }
-
-  function hueEventPos(e) {
-    var rect = CP.hueCanvas.getBoundingClientRect();
-    var clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  }
-
-  function onHueChange(e) {
-    e.preventDefault();
-    CP.h = hueEventPos(e) * 360;
-    drawSLSquare(CP.h);
-    updateCursors();
-  }
-
-  CP.hueCanvas.addEventListener("mousedown",  function(e){ onHueChange(e); CP.hueCanvas.addEventListener("mousemove", onHueChange); });
-  CP.hueCanvas.addEventListener("touchstart", function(e){ onHueChange(e); CP.hueCanvas.addEventListener("touchmove", onHueChange); }, {passive:false});
-  document.addEventListener("mouseup",  function(){ CP.hueCanvas.removeEventListener("mousemove",  onHueChange); });
-  document.addEventListener("touchend", function(){ CP.hueCanvas.removeEventListener("touchmove",  onHueChange); });
-
-  function slEventPos(e) {
-    var rect = CP.slCanvas.getBoundingClientRect();
-    var clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    var clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
-  }
-
-  function onSLChange(e) {
-    e.preventDefault();
-    var pos = slEventPos(e);
-    var sl  = hslFromSLPos(pos.x, pos.y);
-    CP.s = sl.s; CP.l = sl.l;
-    updateCursors();
-  }
-
-  CP.slCanvas.addEventListener("mousedown",  function(e){ onSLChange(e); CP.slCanvas.addEventListener("mousemove", onSLChange); });
-  CP.slCanvas.addEventListener("touchstart", function(e){ onSLChange(e); CP.slCanvas.addEventListener("touchmove", onSLChange); }, {passive:false});
-  document.addEventListener("mouseup",  function(){ CP.slCanvas.removeEventListener("mousemove",  onSLChange); });
-  document.addEventListener("touchend", function(){ CP.slCanvas.removeEventListener("touchmove",  onSLChange); });
-
-  CP.hexInput.addEventListener("input", function () {
-    var val = CP.hexInput.value.replace(/[^0-9a-fA-F]/g, "");
-    if (val.length === 6) {
-      var rgb = hexToRgb("#" + val);
-      var hsl = rgbToHsl(rgb[0], rgb[1], rgb[2]);
-      CP.h = hsl[0]; CP.s = hsl[1]; CP.l = hsl[2];
-      drawSLSquare(CP.h);
-      updateCursors();
+    for (let i = 0; i < sym; i++) {
+      const angle = (i / sym) * Math.PI * 2 + rot, offset = baseRadius * 0.55 * (1 - dens * 0.3);
+      const ox = cx + Math.cos(angle) * offset, oy = cy + Math.sin(angle) * offset;
+      for (let l = 0; l < loops; l++) {
+        const r = baseRadius * (0.35 + l * 0.2) * (1 + rng() * 0.1);
+        drawKnotRing(ox, oy, r, ribbonW, weave, i, l);
+      }
     }
-  });
+    drawKnotRing(cx, cy, baseRadius * 0.25, ribbonW * 1.2, weave, 999, 0);
+  }
 
-  document.getElementById("cpApply").addEventListener("click", applyPicker);
-  document.getElementById("cpCancel").addEventListener("click", function () {
-    CP.overlay.classList.add("hidden");
-  });
-  CP.overlay.addEventListener("click", function (e) {
-    if (e.target === CP.overlay) CP.overlay.classList.add("hidden");
-  });
+  function drawKnotRing(cx, cy, radius, width, weaveStyle, index, loopIdx) {
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.lineWidth = width; ctx.strokeStyle = index % 2 === 0 ? rgbaOf("color1", 0.85) : rgbaOf("color2", 0.85);
+    ctx.stroke();
+    if (weaveStyle !== "balanced" || loopIdx % 2 === 0) {
+      for (let s = 0; s < 8; s++) {
+        const startAngle = (s / 8) * Math.PI * 2 + rng() * 0.3;
+        ctx.beginPath(); ctx.arc(cx, cy, radius, startAngle, startAngle + (Math.PI * 2 / 8) * 0.4);
+        ctx.lineWidth = width * 1.15; ctx.strokeStyle = rgbaOf("color3", 0.9); ctx.stroke();
+      }
+    }
+  }
 
-  document.querySelectorAll(".colorSwatch").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var targetId  = btn.getAttribute("data-target");
-      var label     = btn.closest(".fieldRow").querySelector("label").textContent;
-      openPicker(targetId, label);
+  function drawMotif() {
+    const sc = parseFloat(scale.value), dens = parseInt(density.value, 10) / 100, lw = parseInt(lineWeight.value, 10);
+    const rot = parseInt(rotation.value, 10) * Math.PI / 180, mtype = motifType.value, trot = tileRotation.value, toff = tileOffset.value;
+    const gridSize = Math.max(3, Math.round(6 + sc * 6)), cell = CANVAS_SIZE / gridSize;
+
+    for (let y = 0; y < gridSize; y++) {
+      for (let x = 0; x < gridSize; x++) {
+        let cx = x * cell + cell / 2, cy = y * cell + cell / 2;
+        if (toff === "brick" && y % 2 === 1) cx += cell / 2;
+        if (toff === "diagonal") { cx += (y % 2) * cell / 2; cy += (x % 2) * cell / 2; }
+        let tileRot = rot;
+        if (trot === "90") tileRot += (x + y) * Math.PI / 2;
+        else if (trot === "180") tileRot += (x + y) * Math.PI;
+        else if (trot === "mirror" && (x + y) % 2 === 1) tileRot += Math.PI;
+        const size = cell * 0.35 * (0.7 + rng() * 0.6) * (1 - dens * 0.3);
+        const info = pickColorInfo(0.55, 0.95);
+        drawMotifShape(cx, cy, size, tileRot, mtype, lw, info.color, info.fill);
+      }
+    }
+  }
+
+  function drawMotifShape(cx, cy, size, rot, type, lw, color, fillColor) {
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+    ctx.strokeStyle = color; ctx.fillStyle = fillColor; ctx.lineWidth = lw;
+    if (type === "dot") {
+      ctx.beginPath(); ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2); ctx.stroke(); ctx.fill();
+    } else if (type === "diamond") {
+      ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(size, 0); ctx.lineTo(0, size); ctx.lineTo(-size, 0); ctx.closePath(); ctx.stroke(); ctx.fill();
+    } else if (type === "petal") {
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        ctx.moveTo(0, 0); ctx.quadraticCurveTo(Math.cos(a) * size, Math.sin(a) * size, Math.cos(a + Math.PI / 2) * size, Math.sin(a + Math.PI / 2) * size);
+      }
+      ctx.stroke();
+    } else if (type === "arrow") {
+      ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(size * 0.6, size * 0.6); ctx.lineTo(0, size * 0.3); ctx.lineTo(-size * 0.6, size * 0.6); ctx.closePath(); ctx.stroke(); ctx.fill();
+    } else if (type === "eye") {
+      ctx.beginPath(); ctx.ellipse(0, 0, size, size * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, size * 0.25, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawProcedural() {
+    const rule = ruleSet.value, mut = parseInt(mutationRate.value, 10) / 100, steps = parseInt(growthSteps.value, 10);
+    const lw = parseInt(lineWeight.value, 10), sc = parseFloat(scale.value), dens = parseInt(density.value, 10) / 100;
+    if (rule === "truchet") drawTruchet(mut, lw, sc, dens);
+    else if (rule === "cellular") drawCellular(mut, lw, sc, dens);
+    else if (rule === "flow") drawFlow(mut, lw, sc, dens);
+    else if (rule === "branch") drawBranching(mut, lw, sc, dens, steps);
+  }
+
+  function drawTruchet(mut, lw, sc, dens) {
+    const grid = Math.max(4, Math.round(6 + sc * 6)), cell = CANVAS_SIZE / grid;
+    for (let y = 0; y < grid; y++) {
+      for (let x = 0; x < grid; x++) {
+        const ox = x * cell, oy = y * cell, flip = rng() < 0.5;
+        ctx.strokeStyle = pickColor(0.4, 0.9); ctx.lineWidth = lw * (0.6 + dens * 0.8);
+        ctx.beginPath();
+        if (flip) {
+          ctx.arc(ox, oy, cell, 0, Math.PI / 2); ctx.stroke(); ctx.beginPath(); ctx.arc(ox + cell, oy + cell, cell, Math.PI, Math.PI * 1.5); ctx.stroke();
+        } else {
+          ctx.arc(ox + cell, oy, cell, Math.PI / 2, Math.PI); ctx.stroke(); ctx.beginPath(); ctx.arc(ox, oy + cell, cell, 0, Math.PI / 2); ctx.stroke();
+        }
+      }
+    }
+  }
+
+  function drawCellular(mut, lw, sc, dens) {
+    const grid = Math.max(8, Math.round(10 + sc * 12)), cell = CANVAS_SIZE / grid;
+    const alive = new Uint8Array(grid * grid);
+    for (let i = 0; i < alive.length; i++) alive[i] = rng() < (0.4 + dens * 0.3) ? 1 : 0;
+    for (let step = 0; step < 3 + Math.round(dens * 4); step++) {
+      const next = new Uint8Array(alive.length);
+      for (let y = 0; y < grid; y++) {
+        for (let x = 0; x < grid; x++) {
+          let n = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              n += alive[((y + dy + grid) % grid) * grid + ((x + dx + grid) % grid)];
+            }
+          }
+          next[y * grid + x] = (alive[y * grid + x] ? (n === 2 || n === 3) : n === 3) ? 1 : 0;
+          if (rng() < mut * 0.15) next[y * grid + x] ^= 1;
+        }
+      }
+      for (let i = 0; i < alive.length; i++) alive[i] = next[i];
+    }
+    for (let y = 0; y < grid; y++) {
+      for (let x = 0; x < grid; x++) {
+        if (alive[y * grid + x]) { ctx.fillStyle = pickColor(0.5, 0.95); ctx.fillRect(x * cell, y * cell, cell, cell); }
+      }
+    }
+  }
+
+  function drawFlow(mut, lw, sc, dens) {
+    const count = Math.round(40 + sc * 80), steps = Math.round(30 + dens * 60);
+    ctx.lineWidth = lw * 0.4;
+    for (let i = 0; i < count; i++) {
+      let x = rng() * CANVAS_SIZE, y = rng() * CANVAS_SIZE;
+      const seedA = rng() * 6, seedB = rng() * 6;
+      ctx.strokeStyle = pickColor(0.3, 0.8); ctx.beginPath(); ctx.moveTo(x, y);
+      for (let s = 0; s < steps; s++) {
+        const angle = Math.sin(x * 0.004 + seedA) + Math.cos(y * 0.004 + seedB) + (rng() - 0.5) * mut;
+        x += Math.cos(angle) * 3; y += Math.sin(angle) * 3;
+        if (x < 0 || x > CANVAS_SIZE || y < 0 || y > CANVAS_SIZE) break;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  function drawBranching(mut, lw, sc, dens, steps) {
+    ctx.lineCap = "round";
+    const safeSteps = Math.min(parseInt(steps, 10) || 5, 8), treeCount = Math.max(3, Math.round(4 + sc * 3));
+    for (let t = 0; t < treeCount; t++) {
+      const startX = CANVAS_SIZE * (0.2 + (t + 0.5) / treeCount * 0.6), startY = CANVAS_SIZE * 0.9;
+      branch(startX, startY, -Math.PI / 2 + (rng() - 0.5) * 0.3, CANVAS_SIZE * 0.22 * sc, safeSteps, lw, mut, dens);
+    }
+  }
+
+  function branch(x, y, angle, length, depth, lw, mut, dens) {
+    if (depth <= 0 || length < 3) return;
+    const ex = x + Math.cos(angle) * length, ey = y + Math.sin(angle) * length;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey);
+    ctx.strokeStyle = pickColor(0.5, 0.95); ctx.lineWidth = Math.max(1, lw * (depth / 6)); ctx.stroke();
+    const children = 2 + (rng() < 0.4 ? 1 : 0);
+    for (let i = 0; i < children; i++) {
+      const spread = (i - (children - 1) / 2) * (0.5 + rng() * 0.4) + (rng() - 0.5) * mut;
+      branch(ex, ey, angle + spread, length * (0.65 + rng() * 0.2), depth - 1, lw, mut, dens);
+    }
+  }
+
+  /* =======================================================================
+     RENDER & CONTROL WIRE
+     ======================================================================= */
+  function updateStyleGroups() {
+    const style = patternStyle.value;
+    styleIslamic.classList.toggle("hidden", style !== "islamic");
+    styleCeltic.classList.toggle("hidden", style !== "celtic");
+    styleMotif.classList.toggle("hidden", style !== "motif");
+    styleProcedural.classList.toggle("hidden", style !== "procedural");
+  }
+
+  function drawCurrentStyle() {
+    const style = patternStyle.value;
+    if (style === "islamic") drawIslamic();
+    else if (style === "celtic") drawCeltic();
+    else if (style === "motif") drawMotif();
+    else if (style === "procedural") drawProcedural();
+  }
+
+  function renderPreview() {
+    reseed(); prepareContext(ctx); paintBackground(ctx); drawCurrentStyle(); resetDrawingState(ctx);
+  }
+
+  let renderTimer = null;
+  function scheduleRender() {
+    if (renderTimer) clearTimeout(renderTimer);
+    renderTimer = setTimeout(renderPreview, 60);
+  }
+
+  /* =======================================================================
+     ANDROID TOUCH CONTROL FIX (THUMB-ONLY SLIDER DRAGGING)
+     Prevents accidental value changes when scrolling past sliders with a thumb.
+     ======================================================================= */
+  function preventScrollSliderConflict() {
+    const sliders = document.querySelectorAll('input[type="range"]');
+    sliders.forEach(slider => {
+      let activeTouch = false;
+      slider.addEventListener("touchstart", (e) => {
+        activeTouch = true;
+      }, { passive: true });
+      slider.addEventListener("touchend", () => {
+        activeTouch = false;
+      }, { passive: true });
+      slider.addEventListener("touchmove", (e) => {
+        // If scrolling vertically, release slider lock
+        if (!activeTouch) e.stopPropagation();
+      }, { passive: true });
     });
-  });
+  }
 
-  document.getElementById("bgColorSwatch").addEventListener("click", function () {
-    openPicker("bgColor", "Background");
-  });
+  function randomSeedString() {
+    const words = ["vorifex", "tithe", "ember", "ashen", "silent", "crown", "iron", "crimson", "veil", "stone", "shadow", "hollow", "gilded", "oath"];
+    return words[Math.floor(Math.random() * words.length)] + "-" + Math.floor(Math.random() * 9999);
+  }
 
-  /* -----------------------------------------------------------------------
-     WIRING
-  ----------------------------------------------------------------------- */
-  var sliders = [
-    ["particles","particlesVal"],
-    ["steps","stepsVal"],
-    ["stepSize","stepSizeVal"],
-    ["featureSize","featureSizeVal"],
-    ["curl","curlVal"],
-    ["lineWidth","lineWidthVal"],
-    ["opacity","opacityVal"]
-  ];
-  sliders.forEach(function (pair) {
-    var el = document.getElementById(pair[0]);
-    el.addEventListener("input", function () {
-      document.getElementById(pair[1]).textContent = el.value;
-      schedule();
+  /* =======================================================================
+     TRUE BOUNDED RANDOMIZATION (KEEPS CANVAS SIZE LOCKED)
+     ======================================================================= */
+  function randomizeAll() {
+    seed.value = randomSeedString();
+    
+    // Randomize core parameters within visually pleasant bounds
+    const styles = ["islamic", "celtic", "motif", "procedural"];
+    patternStyle.value = styles[Math.floor(Math.random() * styles.length)];
+    
+    symmetry.value = ["4", "6", "8", "12", "16"][Math.floor(Math.random() * 5)];
+    scale.value = (0.6 + Math.random() * 1.4).toFixed(2);
+    valScale.textContent = scale.value;
+    
+    density.value = Math.round(20 + Math.random() * 60);
+    valDensity.textContent = density.value;
+    
+    lineWeight.value = Math.round(2 + Math.random() * 10);
+    valLineWeight.textContent = lineWeight.value;
+    
+    rotation.value = [0, 15, 30, 45, 60, 90][Math.floor(Math.random() * 6)];
+
+    // Randomize color palette colors while preserving canvas bounds
+    PATTERN_SLOTS.forEach(slot => {
+      colors[slot] = hslToHex(Math.floor(Math.random() * 360), 60 + Math.floor(Math.random() * 35), 45 + Math.floor(Math.random() * 30));
+      opacities[slot] = 100;
     });
-  });
 
-  ["colorMode","direction","size"].forEach(function (id) {
-    document.getElementById(id).addEventListener("change", function () {
-      syncDynamicControls();
-      schedule();
+    updateStyleGroups();
+    updateColorEditor();
+    scheduleRender();
+  }
+
+  function wireControls() {
+    [[scale, valScale], [density, valDensity], [lineWeight, valLineWeight], [mutationRate, valMutationRate]].forEach(([input, span]) => {
+      input.addEventListener("input", () => { span.textContent = input.value; scheduleRender(); });
     });
-  });
 
-  document.getElementById("bgTransparent").addEventListener("change", schedule);
-  document.getElementById("seed").addEventListener("input", schedule);
-  document.getElementById("btnRandomize").addEventListener("click", randomSeed);
-  document.getElementById("btnGenerate").addEventListener("click", schedule);
-  document.getElementById("btnExport").addEventListener("click", exportPNG);
+    [patternStyle, symmetry, rotation, starPoints, ringCount, tessellation, weaveStyle, loopCount, ribbonWidth, motifType, tileRotation, tileOffset, ruleSet, growthSteps, bgDir].forEach(el => {
+      if (el) el.addEventListener("change", () => { if (el === patternStyle) updateStyleGroups(); scheduleRender(); });
+    });
 
-  syncDynamicControls();
-  render();
+    bgStyle.addEventListener("change", () => { updateBgControls(); scheduleRender(); });
+    colorTabs.forEach(btn => btn.addEventListener("click", () => { activeSlot = btn.dataset.slot; updateColorEditor(); }));
 
+    hueSlider.addEventListener("input", applyHslUpdate);
+    satSlider.addEventListener("input", applyHslUpdate);
+    lightSlider.addEventListener("input", applyHslUpdate);
+    opacitySlider.addEventListener("input", () => {
+      opacities[activeSlot] = parseInt(opacitySlider.value, 10);
+      valOpacity.textContent = opacitySlider.value;
+      scheduleRender();
+    });
+
+    btnApplyHarmony.addEventListener("click", () => { applyHarmony(); scheduleRender(); });
+    seed.addEventListener("input", scheduleRender);
+    btnRandomizeSeed.addEventListener("click", () => { seed.value = randomSeedString(); scheduleRender(); });
+    btnRandomizeTop.addEventListener("click", () => { seed.value = randomSeedString(); scheduleRender(); });
+    btnRandomizeAll.addEventListener("click", randomizeAll);
+
+    preventScrollSliderConflict();
+  }
+
+  function applyHslUpdate() {
+    const h = parseInt(hueSlider.value, 10), s = parseInt(satSlider.value, 10), l = parseInt(lightSlider.value, 10);
+    valHue.textContent = h; valSat.textContent = s; valLight.textContent = l;
+    colors[activeSlot] = hslToHex(h, s, l);
+    activeColorInput.value = colors[activeSlot];
+    updateColorEditor(); scheduleRender();
+  }
+
+  /* =======================================================================
+     EXPORT & INIT
+     ======================================================================= */
+  btnExportPng.addEventListener("click", () => exportImage("png"));
+  btnExportJpg.addEventListener("click", () => exportImage("jpg"));
+
+  function exportImage(format) {
+    const useTransparent = format === "png" && exportBg.value === "transparent";
+    const mult = parseInt(exportScale.value, 10) || 1;
+    const out = document.createElement("canvas");
+    out.width = CANVAS_SIZE * mult; out.height = CANVAS_SIZE * mult;
+    const octx = out.getContext("2d");
+
+    const savedCtx = ctx; ctx = octx;
+    reseed(); octx.scale(mult, mult);
+    if (!useTransparent) paintBackground(ctx);
+    drawCurrentStyle(); resetDrawingState(ctx);
+    ctx = savedCtx;
+
+    const a = document.createElement("a");
+    a.href = out.toDataURL(format === "jpg" ? "image/jpeg" : "image/png", 0.92);
+    a.download = (exportName.value || "pattern") + "." + format;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+
+  function init() {
+    wireControls(); updateStyleGroups(); updateBgControls();
+    valScale.textContent = scale.value; valDensity.textContent = density.value;
+    valLineWeight.textContent = lineWeight.value; valMutationRate.textContent = mutationRate.value;
+    renderPreview();
+  }
+
+  init();
 })();
