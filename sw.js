@@ -1,4 +1,4 @@
-const CACHE_NAME = "flow-field-v4";
+const CACHE_NAME = "flow-field-v5";
 const APP_FILES = ["./","./index.html","./flow.css","./flow.js","./manifest.webmanifest"];
 
 self.addEventListener("install",(e)=>{

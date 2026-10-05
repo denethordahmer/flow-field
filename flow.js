@@ -239,8 +239,29 @@
 
   /* -----------------------------------------------------------------------
      RANDOMIZE
+     Shuffles every setting except Size (dimensions stay as-is).
   ----------------------------------------------------------------------- */
+  function randomFrom(list){
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function randomHex(){
+    var letters = "0123456789abcdef";
+    var s = "#";
+    for (var i = 0; i < 6; i++) s += letters[Math.floor(Math.random() * 16)];
+    return s;
+  }
+
+  function setColorInput(id, hex){
+    var el = val(id);
+    if (el) el.value = hex;
+    var dotId = id === "bgColor" ? "bgColorDot" : id + "Dot";
+    var dot = document.getElementById(dotId);
+    if (dot) dot.style.background = hex;
+  }
+
   function randomizeAll(){
+    /* numeric sliders */
     val("seed").value        = Math.floor(Math.random()*900000)+100000;
     val("particles").value   = Math.floor(600+Math.random()*2400);
     val("steps").value       = Math.floor(30+Math.random()*120);
@@ -249,6 +270,32 @@
     val("curl").value        = (0.2+Math.random()*1.8).toFixed(2);
     val("lineWidth").value   = (0.5+Math.random()*2.5).toFixed(1);
     val("opacity").value     = (0.2+Math.random()*0.7).toFixed(2);
+
+    /* color scheme — random from the full 15-mode list */
+    val("colorMode").value = randomFrom(Object.keys(SELECT_LABELS.colorMode));
+
+    /* direction */
+    val("direction").value = randomFrom(["horizontal","vertical","diagonal","radial","chaotic"]);
+
+    /* the four color pickers */
+    setColorInput("color1", randomHex());
+    setColorInput("color2", randomHex());
+    setColorInput("color3", randomHex());
+    setColorInput("color4", randomHex());
+
+    /* background colour */
+    setColorInput("bgColor", randomHex());
+
+    /* transparent background — random on/off */
+    var bgtOn = Math.random() < 0.5;
+    val("bgTransparent").value = bgtOn ? "true" : "false";
+    document.getElementById("bgTransparentToggle").setAttribute("data-on", bgtOn ? "true" : "false");
+    document.getElementById("bgTransparentToggle").textContent = bgtOn ? "On" : "Off";
+    document.getElementById("bgTransparentVal").textContent = bgtOn ? "On" : "Off";
+
+    /* show/hide the correct colour rows for the new mode */
+    syncColorRows();
+
     syncAllBadges();
     schedule();
   }
